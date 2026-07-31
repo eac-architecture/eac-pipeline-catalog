@@ -1,0 +1,60 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: eac-dotnet-test
+  labels:
+    app.kubernetes.io/name: eac-pipeline-catalog
+    app.kubernetes.io/component: dotnet-test
+    app.kubernetes.io/version: 0.1.0
+spec:
+  description: Executes automated tests against the existing .NET build.
+  params:
+    - name: configuration
+      type: string
+      default: Release
+      description: .NET build configuration.
+  workspaces:
+    - name: source
+      description: Workspace containing the built repository.
+  results:
+    - name: test-status
+      description: Automated test status.
+  stepTemplate:
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+      runAsGroup: 65532
+      runAsNonRoot: true
+      runAsUser: 65532
+  steps:
+    - name: test
+      image: mcr.microsoft.com/dotnet/sdk:10.0.201
+      workingDir: $(workspaces.source.path)/repository
+      env:
+        - name: BUILD_CONFIGURATION
+          value: $(params.configuration)
+        - name: CI
+          value: "true"
+        - name: DOTNET_CLI_HOME
+          value: $(workspaces.source.path)/.home/dotnet
+        - name: HOME
+          value: $(workspaces.source.path)/.home
+        - name: NUGET_PACKAGES
+          value: $(workspaces.source.path)/.nuget/packages
+        - name: TEST_COLOR
+          value: Never
+        - name: TEST_OUTPUT
+          value: Table
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        status_file="$(results.test-status.path)"
+        if bash ./scripts/test.sh --no-build; then
+          printf 'Succeeded' > "$status_file"
+        else
+          printf 'Failed' > "$status_file"
+          exit 1
+        fi

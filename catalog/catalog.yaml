@@ -1,0 +1,32 @@
+apiVersion: delivery.eac.dev/v1alpha1
+kind: PipelineCatalog
+metadata:
+  name: eac-pipeline-catalog
+spec:
+  version: 0.1.0
+  profiles:
+    - name: nuget-ci
+      family: packages
+      format: nuget
+      resource: eac-nuget-ci
+      path: catalog/profiles/packages/nuget/pipelines/continuous-integration.yaml
+      status: implemented
+    - name: nuget-release
+      family: packages
+      format: nuget
+      status: planned
+    - name: npm-package
+      family: packages
+      format: npm
+      status: planned
+    - name: angular-web
+      family: applications
+      technology: angular
+      status: planned
+    - name: dotnet-service
+      family: services
+      technology: dotnet
+      status: planned
+    - name: deployment
+      family: deployments
+      status: planned

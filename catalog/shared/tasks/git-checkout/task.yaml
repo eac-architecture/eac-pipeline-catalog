@@ -1,0 +1,56 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: eac-git-checkout
+  labels:
+    app.kubernetes.io/name: eac-pipeline-catalog
+    app.kubernetes.io/component: git-checkout
+    app.kubernetes.io/version: 0.1.0
+spec:
+  description: Checks out an immutable Git revision into the source workspace.
+  params:
+    - name: repo-url
+      type: string
+      description: HTTPS or Git URL of the source repository.
+    - name: revision
+      type: string
+      description: Branch, tag, or commit to fetch.
+  workspaces:
+    - name: source
+      description: Workspace that receives the repository checkout.
+  results:
+    - name: commit-sha
+      description: Immutable commit resolved from the requested revision.
+  stepTemplate:
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+      runAsGroup: 65532
+      runAsNonRoot: true
+      runAsUser: 65532
+  steps:
+    - name: checkout
+      image: alpine/git:2.49.1
+      workingDir: $(workspaces.source.path)
+      env:
+        - name: HOME
+          value: $(workspaces.source.path)/.home
+        - name: REPO_URL
+          value: $(params.repo-url)
+        - name: REVISION
+          value: $(params.revision)
+      script: |
+        #!/usr/bin/env sh
+        set -eu
+
+        rm -rf repository .home
+        mkdir -p repository .home
+        cd repository
+        git init --initial-branch=main
+        git remote add origin "$REPO_URL"
+        git fetch --depth=1 origin "$REVISION"
+        git checkout --detach FETCH_HEAD
+        git rev-parse HEAD | tr -d '\n' > "$(results.commit-sha.path)"
+        printf '[OK] Checked out commit %s\n' "$(git rev-parse --short=12 HEAD)"

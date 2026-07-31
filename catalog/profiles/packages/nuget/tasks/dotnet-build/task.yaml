@@ -1,0 +1,56 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: eac-dotnet-build
+  labels:
+    app.kubernetes.io/name: eac-pipeline-catalog
+    app.kubernetes.io/component: dotnet-build
+    app.kubernetes.io/version: 0.1.0
+spec:
+  description: Executes the repository .NET build contract.
+  params:
+    - name: configuration
+      type: string
+      default: Release
+      description: .NET build configuration.
+  workspaces:
+    - name: source
+      description: Workspace containing the validated repository.
+  results:
+    - name: build-status
+      description: Build contract status.
+  stepTemplate:
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+      runAsGroup: 65532
+      runAsNonRoot: true
+      runAsUser: 65532
+  steps:
+    - name: build
+      image: mcr.microsoft.com/dotnet/sdk:10.0.201
+      workingDir: $(workspaces.source.path)/repository
+      env:
+        - name: BUILD_CONFIGURATION
+          value: $(params.configuration)
+        - name: CI
+          value: "true"
+        - name: DOTNET_CLI_HOME
+          value: $(workspaces.source.path)/.home/dotnet
+        - name: HOME
+          value: $(workspaces.source.path)/.home
+        - name: NUGET_PACKAGES
+          value: $(workspaces.source.path)/.nuget/packages
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        status_file="$(results.build-status.path)"
+        if bash ./scripts/build.sh; then
+          printf 'Succeeded' > "$status_file"
+        else
+          printf 'Failed' > "$status_file"
+          exit 1
+        fi

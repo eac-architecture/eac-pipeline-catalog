@@ -1,0 +1,45 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: eac-repository-validate
+  labels:
+    app.kubernetes.io/name: eac-pipeline-catalog
+    app.kubernetes.io/component: repository-validation
+    app.kubernetes.io/version: 0.1.0
+spec:
+  description: Executes the repository scope and governance contract.
+  workspaces:
+    - name: source
+      description: Workspace containing the checked-out repository.
+  results:
+    - name: validation-status
+      description: Repository validation status.
+  stepTemplate:
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+      runAsGroup: 65532
+      runAsNonRoot: true
+      runAsUser: 65532
+  steps:
+    - name: validate
+      image: mcr.microsoft.com/dotnet/sdk:10.0.201
+      workingDir: $(workspaces.source.path)/repository
+      env:
+        - name: CI
+          value: "true"
+        - name: HOME
+          value: $(workspaces.source.path)/.home
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        status_file="$(results.validation-status.path)"
+        if bash ./scripts/validate.sh; then
+          printf 'Succeeded' > "$status_file"
+        else
+          printf 'Failed' > "$status_file"
+          exit 1
+        fi
