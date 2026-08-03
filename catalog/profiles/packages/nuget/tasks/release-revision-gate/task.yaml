@@ -1,0 +1,74 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: eac-release-revision-gate
+  labels:
+    app.kubernetes.io/name: eac-pipeline-catalog
+    app.kubernetes.io/component: release-revision-gate
+    app.kubernetes.io/version: 0.2.0
+spec:
+  description: Verifies that a prerelease tag and its release branch identify the checked-out commit.
+  params:
+    - name: authorized-branch
+      type: string
+    - name: release-tag
+      type: string
+    - name: package-version
+      type: string
+  workspaces:
+    - name: source
+  results:
+    - name: approved-commit
+      description: Immutable commit accepted by the publication gate.
+    - name: approved-tag
+      description: Immutable prerelease tag accepted by the publication gate.
+  stepTemplate:
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: [ALL]
+      runAsGroup: 65532
+      runAsNonRoot: true
+      runAsUser: 65532
+  steps:
+    - name: verify-release-source
+      image: alpine/git:2.49.1
+      workingDir: $(workspaces.source.path)/repository
+      env:
+        - name: AUTHORIZED_BRANCH
+          value: $(params.authorized-branch)
+        - name: RELEASE_TAG
+          value: $(params.release-tag)
+        - name: PACKAGE_VERSION
+          value: $(params.package-version)
+      script: |
+        #!/usr/bin/env sh
+        set -eu
+
+        case "$AUTHORIZED_BRANCH" in
+          release/*) ;;
+          *) printf '[ERROR] Prerelease publication requires a release/* branch\n' >&2; exit 1 ;;
+        esac
+        case "$RELEASE_TAG" in
+          v*-alpha.*|v*-beta.*|v*-rc.*) ;;
+          *) printf '[ERROR] Prerelease publication requires a v*-alpha.*, v*-beta.* or v*-rc.* tag\n' >&2; exit 1 ;;
+        esac
+        if [ "$RELEASE_TAG" != "v$PACKAGE_VERSION" ]; then
+          printf '[ERROR] Tag %s does not match repository VERSION %s\n' \
+            "$RELEASE_TAG" "$PACKAGE_VERSION" >&2
+          exit 1
+        fi
+
+        checked_out="$(git rev-parse HEAD)"
+        remote_branch="$(git ls-remote --exit-code origin "refs/heads/$AUTHORIZED_BRANCH" | awk '{print $1}')"
+        remote_tag="$(git ls-remote --exit-code origin "refs/tags/$RELEASE_TAG" | awk '{print $1}')"
+        if [ -z "$remote_branch" ] || [ -z "$remote_tag" ] || \
+           [ "$checked_out" != "$remote_branch" ] || [ "$checked_out" != "$remote_tag" ]; then
+          printf '[ERROR] Commit, origin/%s and tag %s must identify the same revision\n' \
+            "$AUTHORIZED_BRANCH" "$RELEASE_TAG" >&2
+          exit 1
+        fi
+        printf '%s' "$checked_out" > "$(results.approved-commit.path)"
+        printf '%s' "$RELEASE_TAG" > "$(results.approved-tag.path)"
+        printf '[OK] Publication gate accepted %s at %s\n' \
+          "$RELEASE_TAG" "$(printf '%s' "$checked_out" | cut -c1-12)"

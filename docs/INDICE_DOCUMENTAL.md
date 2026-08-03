@@ -13,6 +13,9 @@
 | perfiles, contratos y consumo | diseño del catálogo |
 | orden y estado de implementación | plan de implementación |
 | instalación manual | README |
+| ejecución manual de CI | README y `scripts/run-ci.sh` |
+| candidato manual de release | README y `scripts/run-release-candidate.sh` |
+| publicación manual de prerelease | README y `scripts/run-prerelease-publication.sh` |
+| limpieza de recursos Tekton | README y `scripts/clean.sh` |
 | manifiestos ejecutables | `catalog/` |
 | plantillas para consumidores | `templates/` |
-

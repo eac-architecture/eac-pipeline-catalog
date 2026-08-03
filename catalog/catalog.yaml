@@ -3,7 +3,7 @@ kind: PipelineCatalog
 metadata:
   name: eac-pipeline-catalog
 spec:
-  version: 0.1.0
+  version: 0.2.0
   profiles:
     - name: nuget-ci
       family: packages
@@ -11,10 +11,18 @@ spec:
       resource: eac-nuget-ci
       path: catalog/profiles/packages/nuget/pipelines/continuous-integration.yaml
       status: implemented
-    - name: nuget-release
+    - name: nuget-release-candidate
       family: packages
       format: nuget
-      status: planned
+      resource: eac-nuget-release-candidate
+      path: catalog/profiles/packages/nuget/pipelines/release-candidate.yaml
+      status: implemented
+    - name: nuget-publish
+      family: packages
+      format: nuget
+      resource: eac-nuget-prerelease-publication
+      path: catalog/profiles/packages/nuget/pipelines/prerelease-publication.yaml
+      status: implemented
     - name: npm-package
       family: packages
       format: npm

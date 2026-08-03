@@ -17,6 +17,10 @@ kubectl --context "$context" \
     apply \
     --recursive \
     --filename "$root_dir/catalog/profiles"
+kubectl --context "$context" \
+    --namespace "$namespace" \
+    delete task eac-main-revision-gate \
+    --ignore-not-found >/dev/null
 
 printf '[OK] EAC Pipeline Catalog %s installed in %s\n' \
     "$(tr -d '[:space:]' < "$root_dir/VERSION")" \

@@ -1,19 +1,20 @@
 apiVersion: tekton.dev/v1
 kind: Pipeline
 metadata:
-  name: eac-nuget-ci
+  name: eac-nuget-release-candidate
   annotations:
     pipelinesascode.tekton.dev/task: >-
       [https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.2.0/catalog/shared/tasks/git-checkout/task.yaml,
       https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.2.0/catalog/profiles/packages/nuget/tasks/repository-validate/task.yaml,
       https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.2.0/catalog/profiles/packages/nuget/tasks/dotnet-build/task.yaml,
-      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.2.0/catalog/profiles/packages/nuget/tasks/dotnet-test/task.yaml]
+      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.2.0/catalog/profiles/packages/nuget/tasks/dotnet-test/task.yaml,
+      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.2.0/catalog/profiles/packages/nuget/tasks/release-candidate/task.yaml]
   labels:
     app.kubernetes.io/name: eac-pipeline-catalog
-    app.kubernetes.io/component: nuget-ci
+    app.kubernetes.io/component: nuget-release-candidate
     app.kubernetes.io/version: 0.2.0
 spec:
-  description: Executes the reusable continuous integration contract for a .NET NuGet repository.
+  description: Builds, tests, packages and verifies a NuGet candidate without publishing it.
   params:
     - name: repo-url
       type: string
@@ -21,14 +22,12 @@ spec:
     - name: revision
       type: string
       default: main
-      description: Branch, tag, or immutable commit to verify.
-    - name: configuration
-      type: string
-      default: Release
-      description: .NET build configuration.
+      description: Branch, tag or immutable commit to verify.
   workspaces:
     - name: source
-      description: Source and dependency-cache workspace for this execution.
+      description: Source and dependency-cache workspace.
+    - name: artifacts
+      description: Candidate packages, SBOM and evidence workspace.
   tasks:
     - name: checkout
       taskRef:
@@ -59,7 +58,7 @@ spec:
         name: eac-dotnet-build
       params:
         - name: configuration
-          value: $(params.configuration)
+          value: Release
         - name: package-version
           value: $(tasks.validate.results.package-version)
       workspaces:
@@ -73,23 +72,45 @@ spec:
         name: eac-dotnet-test
       params:
         - name: configuration
-          value: $(params.configuration)
+          value: Release
       workspaces:
         - name: source
           workspace: source
+    - name: create-candidate
+      runAfter:
+        - test
+      taskRef:
+        kind: Task
+        name: eac-dotnet-release-candidate
+      params:
+        - name: version
+          value: $(tasks.validate.results.package-version)
+        - name: commit-sha
+          value: $(tasks.checkout.results.commit-sha)
+      workspaces:
+        - name: source
+          workspace: source
+        - name: artifacts
+          workspace: artifacts
   results:
     - name: commit-sha
-      description: Immutable commit verified by the pipeline.
+      description: Immutable commit used by the candidate.
       value: $(tasks.checkout.results.commit-sha)
-    - name: validation-status
-      description: Scope and governance validation status.
-      value: $(tasks.validate.results.validation-status)
     - name: package-version
-      description: Prerelease version validated by the repository.
+      description: Prerelease version read from the repository VERSION file.
       value: $(tasks.validate.results.package-version)
-    - name: build-status
-      description: Build contract status.
-      value: $(tasks.build.results.build-status)
-    - name: test-status
-      description: Automated test status.
-      value: $(tasks.test.results.test-status)
+    - name: package-file
+      description: Generated NuGet package file name.
+      value: $(tasks.create-candidate.results.package-file)
+    - name: package-sha256
+      description: SHA-256 digest of the NuGet package.
+      value: $(tasks.create-candidate.results.package-sha256)
+    - name: symbols-file
+      description: Generated symbol package file name.
+      value: $(tasks.create-candidate.results.symbols-file)
+    - name: sbom-sha256
+      description: SHA-256 digest of the SPDX SBOM.
+      value: $(tasks.create-candidate.results.sbom-sha256)
+    - name: evidence-file
+      description: Relative path to the release evidence document.
+      value: $(tasks.create-candidate.results.evidence-file)

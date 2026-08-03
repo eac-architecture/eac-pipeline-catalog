@@ -7,9 +7,16 @@ required_files=(
     "$root_dir/VERSION"
     "$root_dir/catalog/catalog.yaml"
     "$root_dir/catalog/profiles/packages/nuget/pipelines/continuous-integration.yaml"
+    "$root_dir/catalog/profiles/packages/nuget/pipelines/release-candidate.yaml"
+    "$root_dir/catalog/profiles/packages/nuget/pipelines/prerelease-publication.yaml"
     "$root_dir/templates/pipelines-as-code/packages/nuget/continuous-integration.yaml.template"
     "$root_dir/docs/architecture/EAC_PIPELINE_CATALOG.md"
     "$root_dir/docs/planning/PLAN_DE_IMPLEMENTACION.md"
+    "$root_dir/scripts/install.sh"
+    "$root_dir/scripts/run-ci.sh"
+    "$root_dir/scripts/run-release-candidate.sh"
+    "$root_dir/scripts/run-prerelease-publication.sh"
+    "$root_dir/scripts/clean.sh"
 )
 
 for file in "${required_files[@]}"; do
@@ -20,6 +27,10 @@ for file in "${required_files[@]}"; do
     }
 done
 
+for script in "$root_dir"/scripts/*.sh; do
+    bash -n "$script"
+done
+
 task_count="$(find "$root_dir/catalog" -name 'task.yaml' -type f | wc -l | tr -d '[:space:]')"
 pipeline_count="$(find "$root_dir/catalog/profiles" -path '*/pipelines/*.yaml' -type f | wc -l | tr -d '[:space:]')"
 [[ "$task_count" -ge 1 && "$pipeline_count" -ge 1 ]] || {
@@ -27,6 +38,39 @@ pipeline_count="$(find "$root_dir/catalog/profiles" -path '*/pipelines/*.yaml' -
     exit 1
 }
 
-printf '[OK] Catalog structure validated: %s Tasks, %s Pipelines\n' \
+release_pipeline="$root_dir/catalog/profiles/packages/nuget/pipelines/release-candidate.yaml"
+publication_pipeline="$root_dir/catalog/profiles/packages/nuget/pipelines/prerelease-publication.yaml"
+ci_pipeline="$root_dir/catalog/profiles/packages/nuget/pipelines/continuous-integration.yaml"
+grep -qF '$(tasks.validate.results.package-version)' "$release_pipeline" || {
+    printf '[ERROR] Release candidate must resolve its version from repository validation\n' >&2
+    exit 1
+}
+grep -qF '$(tasks.validate.results.package-version)' "$ci_pipeline" || {
+    printf '[ERROR] NuGet CI must resolve its version from repository validation\n' >&2
+    exit 1
+}
+if grep -qF '$(params.version)' "$release_pipeline" ||
+    grep -q -- '--param "version=' "$root_dir/scripts/run-release-candidate.sh"; then
+    printf '[ERROR] Release candidate cannot accept a free version parameter\n' >&2
+    exit 1
+fi
+grep -qF 'eac-release-revision-gate' "$publication_pipeline" || {
+    printf '[ERROR] Prerelease publication must verify its release branch and immutable tag\n' >&2
+    exit 1
+}
+grep -qF 'release-tag' "$publication_pipeline" || {
+    printf '[ERROR] Prerelease publication must require an immutable release tag\n' >&2
+    exit 1
+}
+grep -qF 'eac-nuget-publish' "$publication_pipeline" || {
+    printf '[ERROR] Prerelease publication must use the dedicated publish Task\n' >&2
+    exit 1
+}
+grep -qF 'secretKeyRef:' "$root_dir/catalog/profiles/packages/nuget/tasks/publish/task.yaml" || {
+    printf '[ERROR] NuGet publication credential must come from a Kubernetes Secret\n' >&2
+    exit 1
+}
+
+printf '[OK] Catalog structure and scripts validated: %s Tasks, %s Pipelines\n' \
     "$task_count" \
     "$pipeline_count"

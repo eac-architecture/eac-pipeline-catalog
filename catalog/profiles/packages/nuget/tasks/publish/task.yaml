@@ -1,0 +1,67 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: eac-nuget-publish
+  labels:
+    app.kubernetes.io/name: eac-pipeline-catalog
+    app.kubernetes.io/component: nuget-publish
+    app.kubernetes.io/version: 0.2.0
+spec:
+  description: Publishes a verified prerelease package to NuGet.org.
+  params:
+    - name: package-file
+      type: string
+    - name: package-source
+      type: string
+      default: https://api.nuget.org/v3/index.json
+  workspaces:
+    - name: artifacts
+  results:
+    - name: publication-status
+      description: Final package publication result.
+  stepTemplate:
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+      runAsGroup: 65532
+      runAsNonRoot: true
+      runAsUser: 65532
+  steps:
+    - name: publish
+      image: mcr.microsoft.com/dotnet/sdk:10.0.201
+      env:
+        - name: NUGET_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: eac-release-publishing
+              key: nuget-api-key
+        - name: PACKAGE_FILE
+          value: $(params.package-file)
+        - name: PACKAGE_SOURCE
+          value: $(params.package-source)
+        - name: DOTNET_CLI_HOME
+          value: $(workspaces.artifacts.path)/.home/dotnet
+        - name: HOME
+          value: $(workspaces.artifacts.path)/.home
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        package_path="$(workspaces.artifacts.path)/packages/$PACKAGE_FILE"
+        [[ -s "$package_path" ]] || {
+          printf '[ERROR] Candidate package is missing: %s\n' "$PACKAGE_FILE" >&2
+          exit 1
+        }
+        [[ -n "$NUGET_API_KEY" ]] || {
+          printf '[ERROR] NuGet.org publication credential is empty\n' >&2
+          exit 1
+        }
+        dotnet nuget push "$package_path" \
+          --source "$PACKAGE_SOURCE" \
+          --api-key "$NUGET_API_KEY" \
+          --skip-duplicate \
+          --force-english-output
+        printf 'published' > "$(results.publication-status.path)"
+        printf '[OK] NuGet prerelease publication completed\n'
