@@ -59,6 +59,11 @@ un consumidor limpio. No recibe credenciales y no publica el candidato.
 La versión se obtiene del archivo `VERSION` del commit solicitado; durante la
 fase actual debe ser alpha o beta.
 
+La ejecución utiliza un único workspace persistente. El código, la caché y los
+artefactos quedan aislados en subdirectorios del mismo PVC para que cada
+`TaskRun` tenga como máximo un workspace escribible y sea compatible con los
+modos de `coschedule` de Tekton.
+
 ## Publicación manual del prerelease aprobado
 
 Desde una rama `release/*` limpia y sincronizada se utiliza un tag prerelease

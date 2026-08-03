@@ -17,9 +17,7 @@ spec:
       description: Immutable source revision recorded in the evidence.
   workspaces:
     - name: source
-      description: Workspace containing the built and tested repository.
-    - name: artifacts
-      description: Workspace receiving packages, SBOM and release evidence.
+      description: Workspace containing the repository, dependency cache and generated artifacts.
   results:
     - name: package-file
       description: Generated NuGet package file name.
@@ -60,16 +58,17 @@ spec:
         - name: NUGET_PACKAGES
           value: $(workspaces.source.path)/.nuget/packages
         - name: ARTIFACTS_DIR
-          value: $(workspaces.artifacts.path)
+          value: $(workspaces.source.path)/artifacts
       script: |
         #!/usr/bin/env bash
         set -euo pipefail
 
         bash ./scripts/release-candidate.sh
 
-        package_file="$(find "$(workspaces.artifacts.path)/packages" -maxdepth 1 -type f -name '*.nupkg' | head -n 1)"
-        symbols_file="$(find "$(workspaces.artifacts.path)/packages" -maxdepth 1 -type f -name '*.snupkg' | head -n 1)"
-        sbom_file="$(workspaces.artifacts.path)/sbom/spdx_2.2/manifest.spdx.json"
+        artifacts_dir="$(workspaces.source.path)/artifacts"
+        package_file="$(find "$artifacts_dir/packages" -maxdepth 1 -type f -name '*.nupkg' | head -n 1)"
+        symbols_file="$(find "$artifacts_dir/packages" -maxdepth 1 -type f -name '*.snupkg' | head -n 1)"
+        sbom_file="$artifacts_dir/sbom/spdx_2.2/manifest.spdx.json"
 
         basename "$package_file" | tr -d '\n' > "$(results.package-file.path)"
         sha256sum "$package_file" | awk '{printf $1}' > "$(results.package-sha256.path)"

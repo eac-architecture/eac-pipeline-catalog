@@ -18,7 +18,6 @@ fi
 
 temp_dir="$(mktemp -d)"
 workspace_template="$temp_dir/workspace.yaml"
-artifacts_template="$temp_dir/artifacts.yaml"
 pod_template="$temp_dir/pod-template.yaml"
 trap 'rm -rf "$temp_dir"' EXIT
 
@@ -28,14 +27,6 @@ spec:
   resources:
     requests:
       storage: 2Gi
-YAML
-
-cat >"$artifacts_template" <<'YAML'
-spec:
-  accessModes: [ReadWriteOnce]
-  resources:
-    requests:
-      storage: 1Gi
 YAML
 
 cat >"$pod_template" <<'YAML'
@@ -54,7 +45,6 @@ tkn pipeline start "$pipeline" \
     --param "authorized-branch=$authorized_branch" \
     --param "release-tag=$release_tag" \
     --workspace "name=source,volumeClaimTemplateFile=$workspace_template" \
-    --workspace "name=artifacts,volumeClaimTemplateFile=$artifacts_template" \
     --pod-template "$pod_template" \
     --showlog \
     --exit-with-pipelinerun-error

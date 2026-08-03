@@ -309,6 +309,13 @@ Para generar un candidato se utiliza
 ejecución usa `eac-release`, pero no proyecta ningún Secret mientras el perfil
 no contenga una Task de publicación.
 
+Los perfiles de candidato y publicación utilizan un solo PVC efímero por
+`PipelineRun`. `source`, la caché de dependencias y `artifacts` son
+subdirectorios del mismo volumen; la Task de publicación recibe únicamente el
+subdirectorio `artifacts` mediante `subPath`. Esta regla evita enlazar varios
+PVC escribibles a una misma `TaskRun` y mantiene la portabilidad entre modos de
+`coschedule` de Tekton.
+
 Para publicar se utiliza `scripts/run-prerelease-publication.sh` con la URL,
 el SHA, la rama `release/*` y el tag prerelease. La Pipeline verifica nuevamente
 los tres valores remotos antes de que la Task con credenciales pueda ejecutarse.

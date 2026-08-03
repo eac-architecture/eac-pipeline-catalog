@@ -19,7 +19,6 @@ spec:
       type: string
   workspaces:
     - name: source
-    - name: artifacts
   tasks:
     - name: checkout
       taskRef:
@@ -93,8 +92,6 @@ spec:
       workspaces:
         - name: source
           workspace: source
-        - name: artifacts
-          workspace: artifacts
     - name: publish
       runAfter: [create-candidate]
       taskRef:
@@ -105,7 +102,8 @@ spec:
           value: $(tasks.create-candidate.results.package-file)
       workspaces:
         - name: artifacts
-          workspace: artifacts
+          workspace: source
+          subPath: artifacts
   results:
     - name: commit-sha
       value: $(tasks.publication-gate.results.approved-commit)

@@ -66,6 +66,21 @@ grep -qF 'eac-nuget-publish' "$publication_pipeline" || {
     printf '[ERROR] Prerelease publication must use the dedicated publish Task\n' >&2
     exit 1
 }
+if grep -q -- '--workspace "name=artifacts,' \
+    "$root_dir/scripts/run-release-candidate.sh" \
+    "$root_dir/scripts/run-prerelease-publication.sh"; then
+    printf '[ERROR] NuGet release profiles must use one persistent workspace\n' >&2
+    exit 1
+fi
+grep -qF 'subPath: artifacts' "$publication_pipeline" || {
+    printf '[ERROR] NuGet publication must isolate artifacts through a workspace subPath\n' >&2
+    exit 1
+}
+if grep -qF '$(workspaces.artifacts.path)' \
+    "$root_dir/catalog/profiles/packages/nuget/tasks/release-candidate/task.yaml"; then
+    printf '[ERROR] Release candidate must write artifacts inside the source workspace\n' >&2
+    exit 1
+fi
 grep -qF 'secretKeyRef:' "$root_dir/catalog/profiles/packages/nuget/tasks/publish/task.yaml" || {
     printf '[ERROR] NuGet publication credential must come from a Kubernetes Secret\n' >&2
     exit 1

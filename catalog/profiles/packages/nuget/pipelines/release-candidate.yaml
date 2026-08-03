@@ -25,9 +25,7 @@ spec:
       description: Branch, tag or immutable commit to verify.
   workspaces:
     - name: source
-      description: Source and dependency-cache workspace.
-    - name: artifacts
-      description: Candidate packages, SBOM and evidence workspace.
+      description: Source, dependency cache and candidate-artifact workspace.
   tasks:
     - name: checkout
       taskRef:
@@ -90,8 +88,6 @@ spec:
       workspaces:
         - name: source
           workspace: source
-        - name: artifacts
-          workspace: artifacts
   results:
     - name: commit-sha
       description: Immutable commit used by the candidate.
