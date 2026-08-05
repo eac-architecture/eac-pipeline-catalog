@@ -23,6 +23,12 @@ spec:
       resource: eac-nuget-prerelease-publication
       path: catalog/profiles/packages/nuget/pipelines/prerelease-publication.yaml
       status: implemented
+    - name: nuget-stable-publish
+      family: packages
+      format: nuget
+      resource: eac-nuget-stable-publication
+      path: catalog/profiles/packages/nuget/pipelines/stable-publication.yaml
+      status: implemented
     - name: npm-package
       family: packages
       format: npm

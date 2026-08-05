@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/component: release-revision-gate
     app.kubernetes.io/version: 0.2.0
 spec:
-  description: Verifies that a prerelease tag and its release branch identify the checked-out commit.
+  description: Verifies that an authorized branch and immutable publication tag identify the checked-out commit.
   params:
     - name: authorized-branch
       type: string
@@ -15,13 +15,16 @@ spec:
       type: string
     - name: package-version
       type: string
+    - name: publication-channel
+      type: string
+      description: Publication channel; prerelease or stable.
   workspaces:
     - name: source
   results:
     - name: approved-commit
       description: Immutable commit accepted by the publication gate.
     - name: approved-tag
-      description: Immutable prerelease tag accepted by the publication gate.
+      description: Immutable publication tag accepted by the publication gate.
   stepTemplate:
     securityContext:
       allowPrivilegeEscalation: false
@@ -41,17 +44,41 @@ spec:
           value: $(params.release-tag)
         - name: PACKAGE_VERSION
           value: $(params.package-version)
+        - name: PUBLICATION_CHANNEL
+          value: $(params.publication-channel)
       script: |
         #!/usr/bin/env sh
         set -eu
 
-        case "$AUTHORIZED_BRANCH" in
-          release/*) ;;
-          *) printf '[ERROR] Prerelease publication requires a release/* branch\n' >&2; exit 1 ;;
-        esac
-        case "$RELEASE_TAG" in
-          v*-alpha.*|v*-beta.*|v*-rc.*) ;;
-          *) printf '[ERROR] Prerelease publication requires a v*-alpha.*, v*-beta.* or v*-rc.* tag\n' >&2; exit 1 ;;
+        case "$PUBLICATION_CHANNEL" in
+          prerelease)
+            case "$AUTHORIZED_BRANCH" in
+              release/*) ;;
+              *) printf '[ERROR] Prerelease publication requires a release/* branch\n' >&2; exit 1 ;;
+            esac
+            case "$RELEASE_TAG" in
+              v*-alpha.*|v*-beta.*|v*-rc.*) ;;
+              *) printf '[ERROR] Prerelease publication requires a v*-alpha.*, v*-beta.* or v*-rc.* tag\n' >&2; exit 1 ;;
+            esac
+            ;;
+          stable)
+            if [ "$AUTHORIZED_BRANCH" != "main" ]; then
+              printf '[ERROR] Stable publication requires the main branch\n' >&2
+              exit 1
+            fi
+            case "$PACKAGE_VERSION" in
+              *-*) printf '[ERROR] Stable publication requires a version without a prerelease suffix\n' >&2; exit 1 ;;
+            esac
+            case "$RELEASE_TAG" in
+              v*-*) printf '[ERROR] Stable publication requires a vX.Y.Z tag\n' >&2; exit 1 ;;
+              v*.*.*) ;;
+              *) printf '[ERROR] Stable publication requires a vX.Y.Z tag\n' >&2; exit 1 ;;
+            esac
+            ;;
+          *)
+            printf '[ERROR] Unsupported publication channel: %s\n' "$PUBLICATION_CHANNEL" >&2
+            exit 1
+            ;;
         esac
         if [ "$RELEASE_TAG" != "v$PACKAGE_VERSION" ]; then
           printf '[ERROR] Tag %s does not match repository VERSION %s\n' \

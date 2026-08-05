@@ -19,6 +19,7 @@ EAC.Foundation, a un servicio concreto ni a una solución funcional.
 | NuGet CI | `eac-nuget-ci` | Implementado |
 | NuGet release candidate | `eac-nuget-release-candidate` | Implementado sin publicación |
 | NuGet prerelease publication | `eac-nuget-prerelease-publication` | Implementado con rama `release/*` y tag inmutable |
+| NuGet stable publication | `eac-nuget-stable-publication` | Implementado con `main`, tag estable y confirmación `Listed` |
 
 ## Instalación manual en Tekton
 
@@ -57,7 +58,7 @@ El comando compila una sola vez en `Release`, ejecuta pruebas, genera
 `.nupkg`, `.snupkg`, SBOM SPDX, hashes y evidencia, y verifica el paquete desde
 un consumidor limpio. No recibe credenciales y no publica el candidato.
 La versión se obtiene del archivo `VERSION` del commit solicitado; durante la
-fase actual debe ser alpha o beta.
+estabilización puede ser `alpha.N`, `beta.N` o `rc.N`.
 
 La ejecución utiliza un único workspace persistente. El código, la caché y los
 artefactos quedan aislados en subdirectorios del mismo PVC para que cada
@@ -82,6 +83,41 @@ publicar. Rechaza cualquier commit que no coincida simultáneamente con la rama
 `release/*` remota y el tag indicado. Obtiene la credencial exclusivamente del
 Secret `eac-release-publishing`, clave
 `nuget-api-key`, dentro de `eac-cicd`.
+La ejecución solo termina correctamente cuando la Registration API confirma
+que la versión exacta está `Listed`; la espera de indexación está limitada a
+20 minutos.
+
+## Publicación manual de la versión estable
+
+Después de aceptar `release/X.Y.Z` en `main`, el tag `vX.Y.Z` debe apuntar al
+commit exacto de `main`:
+
+```bash
+./scripts/run-stable-publication.sh \
+  https://github.com/eac-architecture/eac-foundation.git \
+  <main-commit-sha> \
+  main \
+  v0.1.0 \
+  <final-candidate-pipelinerun> \
+  <candidate-commit-sha> \
+  EAC.Foundation.0.1.0.nupkg \
+  <package-sha256> \
+  EAC.Foundation.0.1.0.snupkg \
+  <sbom-sha256> \
+  evidence/release-evidence.json
+```
+
+La Pipeline rechaza versiones con sufijo, tags que no coincidan con `VERSION`,
+commits distintos de `origin/main`, árboles fuente diferentes al candidato o
+evidencias y hashes alterados. Reutiliza el workspace persistente del candidato
+final y publica el `.nupkg` exacto ya construido, probado y verificado antes del
+merge; no recompila desde `main`. EAC Platform Console resuelve normalmente
+estos parámetros desde el `PipelineRun`, crea el GitHub Release y orquesta la
+sincronización posterior de ramas.
+
+No se debe ejecutar `scripts/clean.sh` entre el candidato final y su promoción:
+la limpieza elimina el PVC retenido y obliga a generar otro candidato antes de
+abrir o fusionar el pull request.
 
 ## Limpieza del namespace de ejecución
 

@@ -16,6 +16,7 @@
 | ejecución manual de CI | README y `scripts/run-ci.sh` |
 | candidato manual de release | README y `scripts/run-release-candidate.sh` |
 | publicación manual de prerelease | README y `scripts/run-prerelease-publication.sh` |
+| publicación manual estable | README y `scripts/run-stable-publication.sh` |
 | limpieza de recursos Tekton | README y `scripts/clean.sh` |
 | manifiestos ejecutables | `catalog/` |
 | plantillas para consumidores | `templates/` |

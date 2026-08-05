@@ -11,8 +11,9 @@ de producto de EAC Platform y sus soluciones consumidoras.
 |---|---|---|---|---|
 | PC-001 | identidad, estructura y contrato de consumo | ADR transversal | Completado | catálogo `0.1.0` publicado |
 | PC-002 | perfil `packages/nuget` CI | PC-001 | En curso | ejecución manual aprobada; evento Git pendiente |
-| PC-003A | candidato `packages/nuget` para G5-G7 | PC-002 | En curso | package, SBOM, smoke test y evidencia |
-| PC-003B | publicación `packages/nuget` para G8 | PC-003A y credencial | Implementado; pendiente de ejecución | compuerta `release/*` + tag, Secret y publicación NuGet |
+| PC-003A | candidato `packages/nuget` para G5-G7 | PC-002 | Completado | `EAC.Foundation 0.1.0-rc.1`: package, símbolos, SBOM, smoke test y evidencia |
+| PC-003B | publicación prerelease `packages/nuget` para G8 | PC-003A, aprobación de SHA y credencial | Completado | compuerta `release/*`, tag, publicación y confirmación `Listed`; la aprobación exacta la gobierna EAC Platform Console |
+| PC-003C | promoción estable `packages/nuget` | PC-003B y merge aprobado a `main` | Implementado; ejecución real pendiente | candidato estable retenido antes del merge; compuerta de árbol, evidencia y hashes; publicación exacta sin recompilar; confirmación `Listed` |
 | PC-004 | perfiles `packages/npm` | contrato npm | Pendiente | package probado y publicado |
 | PC-005 | perfiles `applications/angular` | PC-004 y contrato OCI/web | Pendiente | aplicación web reproducible |
 | PC-006 | perfiles `services/dotnet` | contrato de contenedor | Pendiente | imagen OCI por digest |
@@ -27,8 +28,8 @@ actualizan el catálogo, las plantillas, el diseño transversal y la evidencia.
 
 ## 4. Próximo resultado
 
-Ejecutar el flujo completo con EAC.Foundation: integrar cambios en `develop`,
-preparar `release/0.1.0`, validar el candidato y publicar el prerelease mediante
-un tag inmutable sobre esa rama. Solo la versión estable aprobada se fusionará
-a `main`. La firma de paquetes se evaluará
-como una decisión posterior independiente de la primera publicación.
+Ejecutar con EAC.Foundation el cierre estable ya implementado: conservar el
+candidato `0.1.0`, fusionar su árbol exacto desde `release/0.1.0`, crear
+`v0.1.0`, promover sin recompilar el paquete retenido, confirmar `Listed`, crear
+el GitHub Release y sincronizar `main` hacia `develop`. La firma de paquetes se
+evaluará como una decisión posterior independiente.

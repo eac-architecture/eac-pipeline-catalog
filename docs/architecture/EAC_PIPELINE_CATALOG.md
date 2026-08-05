@@ -156,7 +156,7 @@ tecnología. Las carpetas pendientes no se crean vacías.
 
 | Perfil | Artefacto objetivo | CI | Release | Estado |
 |---|---|---:|---:|---|
-| `packages/nuget` | `.nupkg`, `.snupkg`, SBOM y evidencia | sí | candidato y prerelease implementados | implementado |
+| `packages/nuget` | `.nupkg`, `.snupkg`, SBOM y evidencia | sí | candidato, prerelease y estable implementados | implementado |
 | `packages/npm` | paquete npm | planificado | planificado | pendiente |
 | `applications/angular` | aplicación web estática o imagen OCI | planificado | planificado | pendiente |
 | `services/dotnet` | imagen OCI de API, worker o gateway | planificado | planificado | pendiente |
@@ -222,8 +222,8 @@ flowchart LR
 
 1. Se obtiene la revisión solicitada y se registra su commit inmutable.
 2. Se aplican las mismas reglas de alcance y gobierno que en CI.
-3. La Task de validación lee `VERSION`; actualmente solo acepta versiones
-   `alpha.N` o `beta.N`, y entrega ese resultado a MSBuild sin modificar el
+3. La Task de validación lee `VERSION`; acepta versiones `alpha.N`, `beta.N`,
+   `rc.N` o estables, y entrega ese resultado a MSBuild sin modificar el
    proyecto.
 4. Las pruebas utilizan exactamente los binaries compilados en el paso 3.
 5. Se generan un `.nupkg` y un `.snupkg` sin recompilar.
@@ -254,6 +254,7 @@ flowchart LR
     BUILD --> PACKAGE[6. Recreate and verify candidate]
     PACKAGE --> SECRET[7. Read scoped NuGet key]
     SECRET --> PUBLISH[8. Publish to NuGet.org]
+    PUBLISH --> LISTED[9. Confirm Listed state]
 ```
 
 ### Orden explicado
@@ -270,25 +271,85 @@ flowchart LR
    `eac-release-publishing`.
 8. `dotnet nuget push` publica en NuGet.org con `--skip-duplicate`; ninguna
    clave aparece como parámetro, resultado o log.
+9. La Task descubre `RegistrationsBaseUrl` desde el Service Index y consulta la
+   versión exacta hasta confirmar `listed: true`. La espera está acotada a 20
+   minutos; una versión `Unlisted` o no indexada dentro del plazo hace fallar el
+   `PipelineRun`.
 
-La Pipeline no publica durante el CI ordinario. Se invoca explícitamente desde
-la rama de estabilización y conserva una ServiceAccount de release separada de
-CI. `main` queda reservado para el merge de la versión final aprobada.
+El resultado `publication-status=listed` es la evidencia de cierre. La mera
+presencia en `PackageBaseAddress` no es suficiente porque ese recurso también
+enumera versiones no listadas.
 
-## 9. Versionado
+La Pipeline no publica durante el CI ordinario. EAC Platform Console la invoca
+explícitamente desde la rama de estabilización solo después de comprobar que el
+PR hacia `main` posee una aprobación vigente para el SHA exacto que origina el
+tag. La Pipeline vuelve a validar rama, commit y tag, y conserva una
+ServiceAccount de release separada de CI. `main` queda reservado para el merge
+de la versión final aprobada.
+
+## 9. Contrato `nuget-stable-publication`
+
+```mermaid
+flowchart LR
+    RELEASE[1. Build final candidate on release branch] --> RETAIN[2. Retain package evidence and workspace]
+    RETAIN --> PR[3. Approve pull request]
+    PR --> MAIN[4. Merge exact source tree to main]
+    MAIN --> TAG[5. Create immutable stable tag]
+    TAG --> GATE[6. Match main tree candidate evidence and hashes]
+    GATE --> PUBLISH[7. Promote exact retained package]
+    PUBLISH --> LISTED[8. Confirm Listed state]
+    LISTED --> GH[9. Create GitHub Release]
+    GH --> SYNC[10. Synchronize main into develop]
+```
+
+### Orden explicado
+
+1. La consola cambia `VERSION` de `X.Y.Z-rc.N` a `X.Y.Z` y ejecuta el
+   candidato completo sobre `release/X.Y.Z`.
+2. Tekton conserva en el PVC del `PipelineRun` el `.nupkg`, `.snupkg`, SBOM,
+   hashes y evidencia vinculados al commit candidato estable.
+3. La consola abre el pull request únicamente mientras ese candidato exitoso y
+   su workspace permanezcan disponibles.
+4. GitHub fusiona el pull request después de sus checks y revisiones; `main`
+   incorpora el árbol fuente exacto que produjo el candidato.
+5. La consola crea `vX.Y.Z` exactamente sobre el commit resultante de `main`.
+6. Tekton exige coincidencia entre `main`, el tag y el commit; además compara
+   el árbol Git de `main` con el árbol del candidato y vuelve a calcular los
+   hashes de los artefactos retenidos.
+7. Solo la Task final recibe la clave NuGet y publica el `.nupkg` retenido, sin
+   ejecutar nuevamente build, pruebas o package.
+8. La publicación termina únicamente cuando NuGet.org confirma
+   `listed: true`; la espera máxima es de 20 minutos.
+9. La consola crea el GitHub Release utilizando el mismo tag inmutable.
+10. Un pull request posterior sincroniza `main` hacia `develop` para que el
+    siguiente ciclo conserve la historia estable.
+
+El catálogo es propietario de los pasos Tekton hasta la evidencia `Listed`.
+La consola es propietaria de las transiciones GitHub y presenta el flujo como
+una secuencia gobernada. No se promueve un prerelease ya publicado: se promueve
+el paquete estable `X.Y.Z` generado por el candidato final previo al merge. Su
+digest permanece idéntico desde la aprobación hasta NuGet.org.
+
+Si el merge introduce un árbol diferente, la compuerta falla antes de publicar.
+Si falla únicamente el acceso o la indexación de NuGet.org, la promoción se
+puede reintentar con el mismo tag, candidato y digest. El merge no puede
+revertirse automáticamente, pero tampoco se reconstruye ni se consume otra
+identidad estable.
+
+## 10. Versionado
 
 - el catálogo usa SemVer;
 - cada producto declara su versión preliminar en un archivo `VERSION`;
 - los perfiles de candidato no inventan ni sobrescriben esa versión;
-- mientras el producto esté en desarrollo inicial se admiten únicamente
-  sufijos `alpha.N` o `beta.N`;
+- durante la estabilización se admiten los sufijos `alpha.N`, `beta.N` y
+  `rc.N`;
 - los consumidores fijan una etiqueta inmutable, por ejemplo `v0.1.0`;
 - no se permiten referencias a `main`, `latest` ni tags móviles desde CI;
 - una corrección compatible genera una nueva versión del catálogo;
 - un cambio incompatible crea una nueva versión mayor del perfil;
 - cada `PipelineRun` conserva la especificación resuelta para auditoría.
 
-## 10. Modos de consumo
+## 11. Modos de consumo
 
 ### Pipelines as Code
 
@@ -320,6 +381,13 @@ Para publicar se utiliza `scripts/run-prerelease-publication.sh` con la URL,
 el SHA, la rama `release/*` y el tag prerelease. La Pipeline verifica nuevamente
 los tres valores remotos antes de que la Task con credenciales pueda ejecutarse.
 
+La publicación estable utiliza `scripts/run-stable-publication.sh` con la URL,
+el SHA de `main`, el tag estable y los resultados del `PipelineRun` candidato.
+El runner localiza el PVC retenido por ownership y lo enlaza a la Pipeline de
+promoción. EAC Platform Console lo invoca después del merge aprobado; la
+creación posterior del GitHub Release y la sincronización de `develop` siguen
+siendo transiciones separadas.
+
 ### Limpieza local
 
 `scripts/clean.sh --confirm` restablece el namespace de ejecución eliminando
@@ -327,7 +395,7 @@ las definiciones Tekton, sus ejecuciones, los PVC efímeros y los registros de
 repositorios de Pipelines as Code. No desinstala los controladores, no elimina
 credenciales y no modifica las Service Accounts de la plataforma.
 
-## 11. Seguridad
+## 12. Seguridad
 
 - las Tasks se ejecutan sin privilegios y eliminan capabilities Linux;
 - CI no recibe credenciales de publicación;
@@ -335,3 +403,8 @@ credenciales y no modifica las Service Accounts de la plataforma.
 - las revisiones del catálogo son inmutables;
 - los scripts del pull request se consideran código no confiable;
 - release y deployment utilizarán Service Accounts distintas de CI.
+
+## 13. Referencias NuGet
+
+- [Package metadata y estado `listed`](https://learn.microsoft.com/en-us/nuget/api/registration-base-url-resource).
+- [PackageBaseAddress incluye versiones listadas y no listadas](https://learn.microsoft.com/en-us/nuget/api/package-base-address-resource).

@@ -9,6 +9,8 @@ required_files=(
     "$root_dir/catalog/profiles/packages/nuget/pipelines/continuous-integration.yaml"
     "$root_dir/catalog/profiles/packages/nuget/pipelines/release-candidate.yaml"
     "$root_dir/catalog/profiles/packages/nuget/pipelines/prerelease-publication.yaml"
+    "$root_dir/catalog/profiles/packages/nuget/pipelines/stable-publication.yaml"
+    "$root_dir/catalog/profiles/packages/nuget/tasks/stable-candidate-gate/task.yaml"
     "$root_dir/templates/pipelines-as-code/packages/nuget/continuous-integration.yaml.template"
     "$root_dir/docs/architecture/EAC_PIPELINE_CATALOG.md"
     "$root_dir/docs/planning/PLAN_DE_IMPLEMENTACION.md"
@@ -16,6 +18,7 @@ required_files=(
     "$root_dir/scripts/run-ci.sh"
     "$root_dir/scripts/run-release-candidate.sh"
     "$root_dir/scripts/run-prerelease-publication.sh"
+    "$root_dir/scripts/run-stable-publication.sh"
     "$root_dir/scripts/clean.sh"
 )
 
@@ -40,6 +43,7 @@ pipeline_count="$(find "$root_dir/catalog/profiles" -path '*/pipelines/*.yaml' -
 
 release_pipeline="$root_dir/catalog/profiles/packages/nuget/pipelines/release-candidate.yaml"
 publication_pipeline="$root_dir/catalog/profiles/packages/nuget/pipelines/prerelease-publication.yaml"
+stable_publication_pipeline="$root_dir/catalog/profiles/packages/nuget/pipelines/stable-publication.yaml"
 ci_pipeline="$root_dir/catalog/profiles/packages/nuget/pipelines/continuous-integration.yaml"
 grep -qF '$(tasks.validate.results.package-version)' "$release_pipeline" || {
     printf '[ERROR] Release candidate must resolve its version from repository validation\n' >&2
@@ -60,6 +64,35 @@ grep -qF 'eac-release-revision-gate' "$publication_pipeline" || {
 }
 grep -qF 'release-tag' "$publication_pipeline" || {
     printf '[ERROR] Prerelease publication must require an immutable release tag\n' >&2
+    exit 1
+}
+grep -qF 'publication-channel' "$publication_pipeline" || {
+    printf '[ERROR] Prerelease publication must declare its publication channel\n' >&2
+    exit 1
+}
+grep -qF 'value: stable' "$stable_publication_pipeline" || {
+    printf '[ERROR] Stable publication must use the stable publication gate\n' >&2
+    exit 1
+}
+grep -qF 'eac-nuget-publish' "$stable_publication_pipeline" || {
+    printf '[ERROR] Stable publication must use the dedicated publish Task\n' >&2
+    exit 1
+}
+grep -qF 'eac-nuget-stable-candidate-gate' "$stable_publication_pipeline" || {
+    printf '[ERROR] Stable publication must promote a previously verified candidate\n' >&2
+    exit 1
+}
+if grep -qF 'eac-dotnet-build' "$stable_publication_pipeline" ||
+    grep -qF 'eac-dotnet-release-candidate' "$stable_publication_pipeline"; then
+    printf '[ERROR] Stable publication must not rebuild the verified candidate\n' >&2
+    exit 1
+fi
+grep -qF 'claimName=' "$root_dir/scripts/run-stable-publication.sh" || {
+    printf '[ERROR] Stable publication must reuse the retained candidate workspace\n' >&2
+    exit 1
+}
+grep -qF 'subPath: artifacts' "$stable_publication_pipeline" || {
+    printf '[ERROR] Stable publication must isolate artifacts through a workspace subPath\n' >&2
     exit 1
 }
 grep -qF 'eac-nuget-publish' "$publication_pipeline" || {
@@ -85,6 +118,27 @@ grep -qF 'secretKeyRef:' "$root_dir/catalog/profiles/packages/nuget/tasks/publis
     printf '[ERROR] NuGet publication credential must come from a Kubernetes Secret\n' >&2
     exit 1
 }
+grep -qF 'RegistrationsBaseUrl/3.6.0' \
+    "$root_dir/catalog/profiles/packages/nuget/tasks/publish/task.yaml" || {
+    printf '[ERROR] NuGet publication must discover the registration resource\n' >&2
+    exit 1
+}
+grep -qF 'result.write("listed")' \
+    "$root_dir/catalog/profiles/packages/nuget/tasks/publish/task.yaml" || {
+    printf '[ERROR] NuGet publication must confirm the Listed registry state\n' >&2
+    exit 1
+}
+grep -qF '$(tasks.validate.results.package-version)' "$publication_pipeline" || {
+    printf '[ERROR] NuGet publication must verify the exact declared package version\n' >&2
+    exit 1
+}
+for maturity in 'alpha.N' 'beta.N' 'rc.N'; do
+    grep -qF "$maturity" "$root_dir/docs/architecture/EAC_PIPELINE_CATALOG.md" || {
+        printf '[ERROR] NuGet candidate documentation must cover %s maturity\n' \
+            "$maturity" >&2
+        exit 1
+    }
+done
 
 printf '[OK] Catalog structure and scripts validated: %s Tasks, %s Pipelines\n' \
     "$task_count" \

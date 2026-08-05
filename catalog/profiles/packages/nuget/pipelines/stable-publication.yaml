@@ -1,13 +1,13 @@
 apiVersion: tekton.dev/v1
 kind: Pipeline
 metadata:
-  name: eac-nuget-prerelease-publication
+  name: eac-nuget-stable-publication
   labels:
     app.kubernetes.io/name: eac-pipeline-catalog
-    app.kubernetes.io/component: nuget-prerelease-publication
+    app.kubernetes.io/component: nuget-stable-publication
     app.kubernetes.io/version: 0.2.0
 spec:
-  description: Revalidates an immutable tag, publishes the NuGet prerelease and confirms it is listed.
+  description: Promotes a verified stable NuGet candidate after main accepts the exact source tree and confirms it is listed.
   params:
     - name: repo-url
       type: string
@@ -15,10 +15,24 @@ spec:
       type: string
     - name: authorized-branch
       type: string
+      default: main
     - name: release-tag
+      type: string
+    - name: candidate-commit
+      type: string
+    - name: package-file
+      type: string
+    - name: package-sha256
+      type: string
+    - name: symbols-file
+      type: string
+    - name: sbom-sha256
+      type: string
+    - name: evidence-file
       type: string
   workspaces:
     - name: source
+      description: Retained final-candidate workspace containing source and immutable artifacts.
   tasks:
     - name: checkout
       taskRef:
@@ -53,55 +67,41 @@ spec:
         - name: package-version
           value: $(tasks.validate.results.package-version)
         - name: publication-channel
-          value: prerelease
+          value: stable
       workspaces:
         - name: source
           workspace: source
-    - name: build
+    - name: promote-candidate
       runAfter: [publication-gate]
       taskRef:
         kind: Task
-        name: eac-dotnet-build
+        name: eac-nuget-stable-candidate-gate
       params:
-        - name: configuration
-          value: Release
+        - name: candidate-commit
+          value: $(params.candidate-commit)
         - name: package-version
           value: $(tasks.validate.results.package-version)
-      workspaces:
-        - name: source
-          workspace: source
-    - name: test
-      runAfter: [build]
-      taskRef:
-        kind: Task
-        name: eac-dotnet-test
-      params:
-        - name: configuration
-          value: Release
-      workspaces:
-        - name: source
-          workspace: source
-    - name: create-candidate
-      runAfter: [test]
-      taskRef:
-        kind: Task
-        name: eac-dotnet-release-candidate
-      params:
-        - name: version
-          value: $(tasks.validate.results.package-version)
-        - name: commit-sha
-          value: $(tasks.checkout.results.commit-sha)
+        - name: package-file
+          value: $(params.package-file)
+        - name: package-sha256
+          value: $(params.package-sha256)
+        - name: symbols-file
+          value: $(params.symbols-file)
+        - name: sbom-sha256
+          value: $(params.sbom-sha256)
+        - name: evidence-file
+          value: $(params.evidence-file)
       workspaces:
         - name: source
           workspace: source
     - name: publish
-      runAfter: [create-candidate]
+      runAfter: [promote-candidate]
       taskRef:
         kind: Task
         name: eac-nuget-publish
       params:
         - name: package-file
-          value: $(tasks.create-candidate.results.package-file)
+          value: $(tasks.promote-candidate.results.package-file)
         - name: package-version
           value: $(tasks.validate.results.package-version)
       workspaces:
@@ -111,19 +111,21 @@ spec:
   results:
     - name: commit-sha
       value: $(tasks.publication-gate.results.approved-commit)
+    - name: candidate-commit
+      value: $(tasks.promote-candidate.results.candidate-commit)
     - name: package-version
       value: $(tasks.validate.results.package-version)
     - name: release-tag
       value: $(tasks.publication-gate.results.approved-tag)
     - name: package-file
-      value: $(tasks.create-candidate.results.package-file)
+      value: $(tasks.promote-candidate.results.package-file)
     - name: package-sha256
-      value: $(tasks.create-candidate.results.package-sha256)
+      value: $(tasks.promote-candidate.results.package-sha256)
     - name: symbols-file
-      value: $(tasks.create-candidate.results.symbols-file)
+      value: $(tasks.promote-candidate.results.symbols-file)
     - name: sbom-sha256
-      value: $(tasks.create-candidate.results.sbom-sha256)
+      value: $(tasks.promote-candidate.results.sbom-sha256)
     - name: evidence-file
-      value: $(tasks.create-candidate.results.evidence-file)
+      value: $(tasks.promote-candidate.results.evidence-file)
     - name: publication-status
       value: $(tasks.publish.results.publication-status)
