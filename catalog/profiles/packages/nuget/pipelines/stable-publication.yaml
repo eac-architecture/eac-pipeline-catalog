@@ -1,0 +1,131 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: eac-nuget-stable-publication
+  labels:
+    app.kubernetes.io/name: eac-pipeline-catalog
+    app.kubernetes.io/component: nuget-stable-publication
+    app.kubernetes.io/version: 0.2.0
+spec:
+  description: Promotes a verified stable NuGet candidate after main accepts the exact source tree and confirms it is listed.
+  params:
+    - name: repo-url
+      type: string
+    - name: revision
+      type: string
+    - name: authorized-branch
+      type: string
+      default: main
+    - name: release-tag
+      type: string
+    - name: candidate-commit
+      type: string
+    - name: package-file
+      type: string
+    - name: package-sha256
+      type: string
+    - name: symbols-file
+      type: string
+    - name: sbom-sha256
+      type: string
+    - name: evidence-file
+      type: string
+  workspaces:
+    - name: source
+      description: Retained final-candidate workspace containing source and immutable artifacts.
+  tasks:
+    - name: checkout
+      taskRef:
+        kind: Task
+        name: eac-git-checkout
+      params:
+        - name: repo-url
+          value: $(params.repo-url)
+        - name: revision
+          value: $(params.revision)
+      workspaces:
+        - name: source
+          workspace: source
+    - name: validate
+      runAfter: [checkout]
+      taskRef:
+        kind: Task
+        name: eac-repository-validate
+      workspaces:
+        - name: source
+          workspace: source
+    - name: publication-gate
+      runAfter: [validate]
+      taskRef:
+        kind: Task
+        name: eac-release-revision-gate
+      params:
+        - name: authorized-branch
+          value: $(params.authorized-branch)
+        - name: release-tag
+          value: $(params.release-tag)
+        - name: package-version
+          value: $(tasks.validate.results.package-version)
+        - name: publication-channel
+          value: stable
+      workspaces:
+        - name: source
+          workspace: source
+    - name: promote-candidate
+      runAfter: [publication-gate]
+      taskRef:
+        kind: Task
+        name: eac-nuget-stable-candidate-gate
+      params:
+        - name: candidate-commit
+          value: $(params.candidate-commit)
+        - name: package-version
+          value: $(tasks.validate.results.package-version)
+        - name: package-file
+          value: $(params.package-file)
+        - name: package-sha256
+          value: $(params.package-sha256)
+        - name: symbols-file
+          value: $(params.symbols-file)
+        - name: sbom-sha256
+          value: $(params.sbom-sha256)
+        - name: evidence-file
+          value: $(params.evidence-file)
+      workspaces:
+        - name: source
+          workspace: source
+    - name: publish
+      runAfter: [promote-candidate]
+      taskRef:
+        kind: Task
+        name: eac-nuget-publish
+      params:
+        - name: package-file
+          value: $(tasks.promote-candidate.results.package-file)
+        - name: package-version
+          value: $(tasks.validate.results.package-version)
+      workspaces:
+        - name: artifacts
+          workspace: source
+          subPath: artifacts
+  results:
+    - name: commit-sha
+      value: $(tasks.publication-gate.results.approved-commit)
+    - name: candidate-commit
+      value: $(tasks.promote-candidate.results.candidate-commit)
+    - name: package-version
+      value: $(tasks.validate.results.package-version)
+    - name: release-tag
+      value: $(tasks.publication-gate.results.approved-tag)
+    - name: package-file
+      value: $(tasks.promote-candidate.results.package-file)
+    - name: package-sha256
+      value: $(tasks.promote-candidate.results.package-sha256)
+    - name: symbols-file
+      value: $(tasks.promote-candidate.results.symbols-file)
+    - name: sbom-sha256
+      value: $(tasks.promote-candidate.results.sbom-sha256)
+    - name: evidence-file
+      value: $(tasks.promote-candidate.results.evidence-file)
+    - name: publication-status
+      value: $(tasks.publish.results.publication-status)

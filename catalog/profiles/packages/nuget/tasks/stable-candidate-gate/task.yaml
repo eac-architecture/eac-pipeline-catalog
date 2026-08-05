@@ -1,0 +1,168 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: eac-nuget-stable-candidate-gate
+  labels:
+    app.kubernetes.io/name: eac-pipeline-catalog
+    app.kubernetes.io/component: nuget-stable-candidate-gate
+    app.kubernetes.io/version: 0.2.0
+spec:
+  description: Verifies that main has the candidate source tree and promotes the previously verified NuGet artifacts without rebuilding.
+  params:
+    - name: candidate-commit
+      type: string
+    - name: package-version
+      type: string
+    - name: package-file
+      type: string
+    - name: package-sha256
+      type: string
+    - name: symbols-file
+      type: string
+    - name: sbom-sha256
+      type: string
+    - name: evidence-file
+      type: string
+  workspaces:
+    - name: source
+      description: Workspace retained from the successful final candidate PipelineRun.
+  results:
+    - name: package-file
+    - name: package-sha256
+    - name: symbols-file
+    - name: sbom-sha256
+    - name: evidence-file
+    - name: candidate-commit
+    - name: main-commit
+  stepTemplate:
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: [ALL]
+      runAsGroup: 65532
+      runAsNonRoot: true
+      runAsUser: 65532
+  steps:
+    - name: verify-source-tree
+      image: alpine/git:2.49.1
+      workingDir: $(workspaces.source.path)/repository
+      env:
+        - name: CANDIDATE_COMMIT
+          value: $(params.candidate-commit)
+      script: |
+        #!/usr/bin/env sh
+        set -eu
+
+        git fetch --depth=1 origin "$CANDIDATE_COMMIT"
+        resolved_candidate="$(git rev-parse FETCH_HEAD)"
+        main_commit="$(git rev-parse HEAD)"
+        if [ "$resolved_candidate" != "$CANDIDATE_COMMIT" ]; then
+          printf '[ERROR] Candidate commit does not resolve to the expected revision\n' >&2
+          exit 1
+        fi
+        candidate_tree="$(git rev-parse "$resolved_candidate^{tree}")"
+        main_tree="$(git rev-parse "$main_commit^{tree}")"
+        if [ "$candidate_tree" != "$main_tree" ]; then
+          printf '[ERROR] Main source tree differs from the verified stable candidate\n' >&2
+          exit 1
+        fi
+        printf '%s' "$resolved_candidate" > "$(results.candidate-commit.path)"
+        printf '%s' "$main_commit" > "$(results.main-commit.path)"
+        printf '[OK] Main tree matches stable candidate %s\n' \
+          "$(printf '%s' "$resolved_candidate" | cut -c1-12)"
+    - name: verify-artifacts
+      image: python:3.11.9-alpine3.20
+      env:
+        - name: ARTIFACTS_DIR
+          value: $(workspaces.source.path)/artifacts
+        - name: CANDIDATE_COMMIT
+          value: $(params.candidate-commit)
+        - name: PACKAGE_VERSION
+          value: $(params.package-version)
+        - name: PACKAGE_FILE
+          value: $(params.package-file)
+        - name: PACKAGE_SHA256
+          value: $(params.package-sha256)
+        - name: SYMBOLS_FILE
+          value: $(params.symbols-file)
+        - name: SBOM_SHA256
+          value: $(params.sbom-sha256)
+        - name: EVIDENCE_FILE
+          value: $(params.evidence-file)
+        - name: PACKAGE_FILE_RESULT
+          value: $(results.package-file.path)
+        - name: PACKAGE_SHA256_RESULT
+          value: $(results.package-sha256.path)
+        - name: SYMBOLS_FILE_RESULT
+          value: $(results.symbols-file.path)
+        - name: SBOM_SHA256_RESULT
+          value: $(results.sbom-sha256.path)
+        - name: EVIDENCE_FILE_RESULT
+          value: $(results.evidence-file.path)
+      script: |
+        #!/usr/bin/env python3
+        import hashlib
+        import json
+        import os
+        import pathlib
+        import sys
+
+        root = pathlib.Path(os.environ["ARTIFACTS_DIR"]).resolve()
+
+        def artifact(relative: str) -> pathlib.Path:
+            path = (root / relative).resolve()
+            if root not in path.parents or not path.is_file():
+                raise ValueError(f"Candidate artifact is missing: {relative}")
+            return path
+
+        def sha256(path: pathlib.Path) -> str:
+            digest = hashlib.sha256()
+            with path.open("rb") as stream:
+                for block in iter(lambda: stream.read(1024 * 1024), b""):
+                    digest.update(block)
+            return digest.hexdigest()
+
+        try:
+            evidence_path = artifact(os.environ["EVIDENCE_FILE"])
+            evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+            package_file = os.environ["PACKAGE_FILE"]
+            symbols_file = os.environ["SYMBOLS_FILE"]
+            package_path = artifact(f"packages/{package_file}")
+            symbols_path = artifact(f"packages/{symbols_file}")
+            sbom_path = artifact("sbom/spdx_2.2/manifest.spdx.json")
+            expected = {
+                "version": os.environ["PACKAGE_VERSION"],
+                "commit": os.environ["CANDIDATE_COMMIT"],
+                "package": package_file,
+                "packageSha": os.environ["PACKAGE_SHA256"],
+                "symbols": symbols_file,
+                "sbomSha": os.environ["SBOM_SHA256"],
+            }
+            actual = {
+                "version": str(evidence.get("version", "")),
+                "commit": str(evidence.get("commit", "")),
+                "package": str(evidence.get("package", {}).get("file", "")),
+                "packageSha": sha256(package_path),
+                "symbols": str(evidence.get("symbols", {}).get("file", "")),
+                "sbomSha": sha256(sbom_path),
+            }
+            if actual != expected:
+                raise ValueError("Candidate evidence or digest does not match the staged artifacts")
+            if str(evidence.get("package", {}).get("sha256", "")) != actual["packageSha"]:
+                raise ValueError("Package digest differs from release evidence")
+            if str(evidence.get("symbols", {}).get("sha256", "")) != sha256(symbols_path):
+                raise ValueError("Symbols digest differs from release evidence")
+            if str(evidence.get("sbom", {}).get("sha256", "")) != actual["sbomSha"]:
+                raise ValueError("SBOM digest differs from release evidence")
+        except (OSError, ValueError, json.JSONDecodeError) as error:
+            print(f"[ERROR] {error}", file=sys.stderr)
+            sys.exit(1)
+
+        pathlib.Path(os.environ["PACKAGE_FILE_RESULT"]).write_text(package_file)
+        pathlib.Path(os.environ["PACKAGE_SHA256_RESULT"]).write_text(actual["packageSha"])
+        pathlib.Path(os.environ["SYMBOLS_FILE_RESULT"]).write_text(symbols_file)
+        pathlib.Path(os.environ["SBOM_SHA256_RESULT"]).write_text(actual["sbomSha"])
+        pathlib.Path(os.environ["EVIDENCE_FILE_RESULT"]).write_text(
+            os.environ["EVIDENCE_FILE"]
+        )
+        print(f"[OK] Promoting verified package {package_file} without rebuilding")
