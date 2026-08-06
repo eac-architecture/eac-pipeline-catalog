@@ -6,6 +6,7 @@ root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 required_files=(
     "$root_dir/VERSION"
     "$root_dir/catalog/catalog.yaml"
+    "$root_dir/catalog/shared/tasks/git-checkout/task.yaml"
     "$root_dir/catalog/profiles/packages/nuget/pipelines/continuous-integration.yaml"
     "$root_dir/catalog/profiles/packages/nuget/pipelines/release-candidate.yaml"
     "$root_dir/catalog/profiles/packages/nuget/pipelines/prerelease-publication.yaml"
@@ -45,6 +46,31 @@ release_pipeline="$root_dir/catalog/profiles/packages/nuget/pipelines/release-ca
 publication_pipeline="$root_dir/catalog/profiles/packages/nuget/pipelines/prerelease-publication.yaml"
 stable_publication_pipeline="$root_dir/catalog/profiles/packages/nuget/pipelines/stable-publication.yaml"
 ci_pipeline="$root_dir/catalog/profiles/packages/nuget/pipelines/continuous-integration.yaml"
+checkout_task="$root_dir/catalog/shared/tasks/git-checkout/task.yaml"
+if ! grep -A1 -qF 'name: HOME' "$checkout_task" ||
+    ! grep -qF 'value: /tekton/home' "$checkout_task"; then
+    printf '[ERROR] Git checkout must use the writable Tekton credential HOME\n' >&2
+    exit 1
+fi
+if ! grep -qF 'secretName: eac-git-checkout' "$checkout_task" ||
+    ! grep -qF 'optional: true' "$checkout_task" ||
+    ! grep -qF 'mountPath: /var/run/eac/git-credentials' "$checkout_task"; then
+    printf '[ERROR] Git checkout must mount the optional isolated credential Secret\n' >&2
+    exit 1
+fi
+if [[ "$(grep -R -lF 'secretName: eac-git-checkout' "$root_dir/catalog" | wc -l | tr -d ' ')" != "1" ]]; then
+    printf '[ERROR] Git checkout credentials must be mounted by exactly one Task\n' >&2
+    exit 1
+fi
+if grep -R -nE 'value: .*workspaces\.(source|artifacts)\.path.*/\.home$' \
+    "$root_dir/catalog"; then
+    printf '[ERROR] Task HOME must not copy Git credentials into a retained workspace\n' >&2
+    exit 1
+fi
+if grep -Eq 'name: (token|password|username)' "$checkout_task"; then
+    printf '[ERROR] Git checkout credentials must come from the isolated Secret, not Task parameters\n' >&2
+    exit 1
+fi
 grep -qF '$(tasks.validate.results.package-version)' "$release_pipeline" || {
     printf '[ERROR] Release candidate must resolve its version from repository validation\n' >&2
     exit 1

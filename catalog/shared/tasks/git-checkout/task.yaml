@@ -21,6 +21,11 @@ spec:
   results:
     - name: commit-sha
       description: Immutable commit resolved from the requested revision.
+  volumes:
+    - name: git-credentials
+      secret:
+        secretName: eac-git-checkout
+        optional: true
   stepTemplate:
     securityContext:
       allowPrivilegeEscalation: false
@@ -36,17 +41,32 @@ spec:
       workingDir: $(workspaces.source.path)
       env:
         - name: HOME
-          value: $(workspaces.source.path)/.home
+          value: /tekton/home
         - name: REPO_URL
           value: $(params.repo-url)
         - name: REVISION
           value: $(params.revision)
+      volumeMounts:
+        - name: git-credentials
+          mountPath: /var/run/eac/git-credentials
+          readOnly: true
       script: |
         #!/usr/bin/env sh
         set -eu
 
-        rm -rf repository .home
-        mkdir -p repository .home
+        credentials_path=/var/run/eac/git-credentials
+        if [ -s "$credentials_path/username" ] && [ -s "$credentials_path/password" ]; then
+          git config --global credential.helper store
+          {
+            printf 'protocol=https\n'
+            printf 'host=github.com\n'
+            printf 'username=%s\n' "$(cat "$credentials_path/username")"
+            printf 'password=%s\n\n' "$(cat "$credentials_path/password")"
+          } | git credential approve
+        fi
+
+        rm -rf repository
+        mkdir -p repository
         cd repository
         git init --initial-branch=main
         git remote add origin "$REPO_URL"
