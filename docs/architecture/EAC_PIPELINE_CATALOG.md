@@ -106,7 +106,7 @@ Desde el checkout en adelante utiliza el mismo contrato de CI.
 | Elemento | Responsabilidad | Ubicación |
 |---|---|---|
 | GitHub App | suscribirse a eventos y operar checks con permisos mínimos | organización GitHub |
-| instalación de la App | conceder acceso a los repositorios seleccionados | organización GitHub |
+| instalación de la App | conceder acceso a todos los repositorios actuales y futuros del workspace mediante `All repositories` | organización GitHub |
 | webhook URL | recibir los eventos enviados por GitHub | endpoint público |
 | webhook secret | verificar que el evento fue firmado por GitHub | Secret del namespace de Pipelines as Code |
 | App ID y private key | autenticar Pipelines as Code ante la API de GitHub | Secret del namespace de Pipelines as Code |
@@ -117,6 +117,9 @@ Desde el checkout en adelante utiliza el mismo contrato de CI.
 La App no ejecuta Tekton y el recurso `Repository` no escucha GitHub. La App
 y el webhook transportan el evento; Pipelines as Code lo procesa; `Repository`
 autoriza el mapeo URL-namespace; finalmente Tekton ejecuta el `PipelineRun`.
+El acceso organizacional de la App no habilita por sí solo un pipeline: cada
+repositorio debe mantener su binding `.tekton` y su recurso `Repository`
+declarativo en el namespace gobernado.
 
 ## 4. Plantilla, binding y trigger
 
