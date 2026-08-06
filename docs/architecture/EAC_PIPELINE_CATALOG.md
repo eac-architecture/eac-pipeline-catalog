@@ -398,7 +398,24 @@ las definiciones Tekton, sus ejecuciones, los PVC efímeros y los registros de
 repositorios de Pipelines as Code. No desinstala los controladores, no elimina
 credenciales y no modifica las Service Accounts de la plataforma.
 
-## 12. Seguridad
+## 12. Matriz de trazabilidad de reglas planificadas
+
+El catálogo ya ejecuta estos comportamientos, pero los IDs permanecerán en
+`plannedRules` hasta que sus validaciones publiquen metadatos de regla y
+evidencia homogéneos con el resto de EAC.
+
+| ID | Regla de diseño | Evidencia ejecutable prevista |
+|---|---|---|
+| `EAC-PC-CATALOG-001` | Los repositorios consumen Pipelines versionadas sin copiar su implementación. | Catalog resolution test. |
+| `EAC-PC-VERSION-001` | Toda referencia consumida es inmutable y SemVer. | Reference validation test. |
+| `EAC-PC-CI-001` | CI restaura, compila, prueba y conserva evidencia sin credenciales de publicación. | Tekton CI integration test. |
+| `EAC-PC-CANDIDATE-001` | El candidato conserva versión, SHA, paquete, símbolos, SBOM y hashes verificables. | Release candidate integration test. |
+| `EAC-PC-PRERELEASE-001` | Un prerelease publica exactamente el candidato aprobado desde `release/*`. | Prerelease publication test. |
+| `EAC-PC-STABLE-001` | Stable promueve el artefacto retenido desde el `main` coincidente sin reconstruir. | Stable promotion test. |
+| `EAC-PC-CRED-001` | Solo las Tasks de publicación reciben las credenciales mínimas. | Tekton security policy test. |
+| `EAC-PC-VALIDATE-001` | Scripts y recursos Tekton se validan antes de distribuir el catálogo. | Catalog validation test. |
+
+## 13. Seguridad
 
 - las Tasks se ejecutan sin privilegios y eliminan capabilities Linux;
 - CI no recibe credenciales de publicación;
@@ -407,7 +424,7 @@ credenciales y no modifica las Service Accounts de la plataforma.
 - los scripts del pull request se consideran código no confiable;
 - release y deployment utilizarán Service Accounts distintas de CI.
 
-## 13. Referencias NuGet
+## 14. Referencias NuGet
 
 - [Package metadata y estado `listed`](https://learn.microsoft.com/en-us/nuget/api/registration-base-url-resource).
 - [PackageBaseAddress incluye versiones listadas y no listadas](https://learn.microsoft.com/en-us/nuget/api/package-base-address-resource).
