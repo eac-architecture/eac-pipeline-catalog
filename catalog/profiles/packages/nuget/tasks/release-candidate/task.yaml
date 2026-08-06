@@ -54,7 +54,7 @@ spec:
         - name: DOTNET_CLI_HOME
           value: $(workspaces.source.path)/.home/dotnet
         - name: HOME
-          value: $(workspaces.source.path)/.home
+          value: /tekton/home
         - name: NUGET_PACKAGES
           value: $(workspaces.source.path)/.nuget/packages
         - name: ARTIFACTS_DIR

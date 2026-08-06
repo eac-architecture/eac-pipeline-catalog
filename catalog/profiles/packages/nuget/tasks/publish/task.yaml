@@ -47,7 +47,7 @@ spec:
         - name: DOTNET_CLI_HOME
           value: $(workspaces.artifacts.path)/.home/dotnet
         - name: HOME
-          value: $(workspaces.artifacts.path)/.home
+          value: /tekton/home
       script: |
         #!/usr/bin/env bash
         set -euo pipefail
