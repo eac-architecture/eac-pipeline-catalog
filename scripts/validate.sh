@@ -47,6 +47,7 @@ publication_pipeline="$root_dir/catalog/profiles/packages/nuget/pipelines/prerel
 stable_publication_pipeline="$root_dir/catalog/profiles/packages/nuget/pipelines/stable-publication.yaml"
 ci_pipeline="$root_dir/catalog/profiles/packages/nuget/pipelines/continuous-integration.yaml"
 checkout_task="$root_dir/catalog/shared/tasks/git-checkout/task.yaml"
+release_gate_task="$root_dir/catalog/profiles/packages/nuget/tasks/release-revision-gate/task.yaml"
 if ! grep -A1 -qF 'name: HOME' "$checkout_task" ||
     ! grep -qF 'value: /tekton/home' "$checkout_task"; then
     printf '[ERROR] Git checkout must use the writable Tekton credential HOME\n' >&2
@@ -58,8 +59,15 @@ if ! grep -qF 'secretName: eac-git-checkout' "$checkout_task" ||
     printf '[ERROR] Git checkout must mount the optional isolated credential Secret\n' >&2
     exit 1
 fi
-if [[ "$(grep -R -lF 'secretName: eac-git-checkout' "$root_dir/catalog" | wc -l | tr -d ' ')" != "1" ]]; then
-    printf '[ERROR] Git checkout credentials must be mounted by exactly one Task\n' >&2
+if ! grep -qF 'secretName: eac-git-checkout' "$release_gate_task" ||
+    ! grep -qF 'optional: true' "$release_gate_task" ||
+    ! grep -qF 'mountPath: /var/run/eac/git-credentials' "$release_gate_task" ||
+    ! grep -qF 'value: /tekton/home' "$release_gate_task"; then
+    printf '[ERROR] Release revision gate must mount the isolated Git credential Secret\n' >&2
+    exit 1
+fi
+if [[ "$(grep -R -lF 'secretName: eac-git-checkout' "$root_dir/catalog" | wc -l | tr -d ' ')" != "2" ]]; then
+    printf '[ERROR] Git credentials must be mounted only by checkout and release revision gate\n' >&2
     exit 1
 fi
 if grep -R -nE 'value: .*workspaces\.(source|artifacts)\.path.*/\.home$' \

@@ -33,11 +33,13 @@ catálogo desde un `PipelineRun` bajo `.tekton/`; Pipelines as Code resuelve la
 Pipeline y sus Tasks sin copiarlas al repositorio consumidor.
 
 Los repositorios privados se obtienen mediante un Secret Git montado únicamente
-en la Task de checkout. La Task no recibe tokens como parámetros ni distingue
+en las Tasks de checkout y verificación remota de la revisión de release. Las
+Tasks no reciben tokens como parámetros ni distinguen
 repositorios públicos y privados; el volumen es opcional para conservar el
 checkout anónimo. En local, `local-environment` crea el Secret desde la sesión
 segura de GitHub CLI. La configuración temporal se escribe en `/tekton/home`,
-fuera del workspace retenido, y no alcanza a validación, build ni pruebas.
+fuera del workspace retenido, y no alcanza a validación de producto, build,
+pruebas ni publicación del paquete.
 
 ## Ejecución manual de CI
 
