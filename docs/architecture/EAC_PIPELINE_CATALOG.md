@@ -112,7 +112,7 @@ Desde el checkout en adelante utiliza el mismo contrato de CI.
 | App ID y private key | autenticar Pipelines as Code ante la API de GitHub | Secret del namespace de Pipelines as Code |
 | `Repository` | asociar una URL Git con el namespace de ejecución | clúster Tekton |
 | `.tekton/*.yaml` | declarar el trigger y enlazar el repositorio con un perfil | repositorio consumidor |
-| credencial Git de checkout | permitir que Tekton obtenga repositorios privados sin exponer tokens en la Pipeline | Secret opcional montado exclusivamente en la Task de checkout |
+| credencial Git de lectura | obtener repositorios privados y contrastar rama/tag remotos sin exponer tokens en la Pipeline | Secret opcional montado exclusivamente en checkout y compuerta de revisión de release |
 | catálogo | proporcionar Pipeline y Tasks versionadas | `eac-pipeline-catalog` |
 
 La App no ejecuta Tekton y el recurso `Repository` no escucha GitHub. La App
@@ -124,11 +124,12 @@ declarativo en el namespace gobernado.
 
 La credencial de checkout es independiente de la GitHub App de Pipelines as
 Code: la App recibe eventos y actualiza checks; el Secret Git autoriza el
-`fetch` que ejecuta Tekton. La Task compartida monta el Secret como volumen
-opcional sólo en su Step y construye allí la configuración Git efímera. Fija
-`HOME=/tekton/home`, no recibe usuario o token como parámetros y funciona igual
-para una URL HTTPS pública o privada. Las Tasks posteriores no reciben el
-Secret.
+`fetch` y los `ls-remote` de integridad que ejecuta Tekton. Sólo las Tasks de
+checkout y compuerta de revisión de release montan el Secret como volumen
+opcional y construyen allí la configuración Git efímera. Fijan
+`HOME=/tekton/home`, no reciben usuario o token como parámetros y funcionan
+igual para una URL HTTPS pública o privada. Validación de producto, build,
+pruebas y publicación del paquete no reciben el Secret.
 
 ## 4. Plantilla, binding y trigger
 
@@ -421,7 +422,7 @@ evidencia homogéneos con el resto de EAC.
 | `EAC-PC-CANDIDATE-001` | El candidato conserva versión, SHA, paquete, símbolos, SBOM y hashes verificables. | Release candidate integration test. |
 | `EAC-PC-PRERELEASE-001` | Un prerelease publica exactamente el candidato aprobado desde `release/*`. | Prerelease publication test. |
 | `EAC-PC-STABLE-001` | Stable promueve el artefacto retenido desde el `main` coincidente sin reconstruir. | Stable promotion test. |
-| `EAC-PC-CRED-001` | Cada credencial se entrega sólo a la Task que la necesita: Git al checkout y publicación al publisher. | Tekton security policy test. |
+| `EAC-PC-CRED-001` | Cada credencial se entrega sólo a la Task que la necesita: Git al checkout y a la compuerta remota; publicación al publisher. | Tekton security policy test. |
 | `EAC-PC-VALIDATE-001` | Scripts y recursos Tekton se validan antes de distribuir el catálogo. | Catalog validation test. |
 
 ## 13. Seguridad
@@ -429,8 +430,8 @@ evidencia homogéneos con el resto de EAC.
 - las Tasks se ejecutan sin privilegios y eliminan capabilities Linux;
 - CI no recibe credenciales de publicación;
 - los parámetros no contienen secretos;
-- las credenciales Git sólo se montan en la Task de checkout mediante un Secret
-  opcional y se procesan en el `HOME` efímero reservado por Tekton;
+- las credenciales Git sólo se montan en checkout y en la compuerta que compara
+  rama/tag remotos, mediante un Secret opcional procesado en un `HOME` efímero;
 - ninguna Task copia credenciales Git dentro del workspace de código,
   dependencias o artefactos retenidos;
 - las revisiones del catálogo son inmutables;

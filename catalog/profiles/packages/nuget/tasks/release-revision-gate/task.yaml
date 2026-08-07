@@ -25,6 +25,11 @@ spec:
       description: Immutable commit accepted by the publication gate.
     - name: approved-tag
       description: Immutable publication tag accepted by the publication gate.
+  volumes:
+    - name: git-credentials
+      secret:
+        secretName: eac-git-checkout
+        optional: true
   stepTemplate:
     securityContext:
       allowPrivilegeEscalation: false
@@ -38,6 +43,8 @@ spec:
       image: alpine/git:2.49.1
       workingDir: $(workspaces.source.path)/repository
       env:
+        - name: HOME
+          value: /tekton/home
         - name: AUTHORIZED_BRANCH
           value: $(params.authorized-branch)
         - name: RELEASE_TAG
@@ -46,9 +53,24 @@ spec:
           value: $(params.package-version)
         - name: PUBLICATION_CHANNEL
           value: $(params.publication-channel)
+      volumeMounts:
+        - name: git-credentials
+          mountPath: /var/run/eac/git-credentials
+          readOnly: true
       script: |
         #!/usr/bin/env sh
         set -eu
+
+        credentials_path=/var/run/eac/git-credentials
+        if [ -s "$credentials_path/username" ] && [ -s "$credentials_path/password" ]; then
+          git config --global credential.helper store
+          {
+            printf 'protocol=https\n'
+            printf 'host=github.com\n'
+            printf 'username=%s\n' "$(cat "$credentials_path/username")"
+            printf 'password=%s\n\n' "$(cat "$credentials_path/password")"
+          } | git credential approve
+        fi
 
         case "$PUBLICATION_CHANNEL" in
           prerelease)
