@@ -294,11 +294,12 @@ presencia en `PackageBaseAddress` no es suficiente porque ese recurso también
 enumera versiones no listadas.
 
 La Pipeline no publica durante el CI ordinario. EAC Platform Console la invoca
-explícitamente desde la rama de estabilización solo después de comprobar que el
-PR hacia `main` posee una aprobación vigente para el SHA exacto que origina el
-tag. La Pipeline vuelve a validar rama, commit y tag, y conserva una
-ServiceAccount de release separada de CI. `main` queda reservado para el merge
-de la versión final aprobada.
+directamente desde la rama de estabilización tras la confirmación explícita
+`Publish <versión>`. No existe una `PipelineRun` de candidato previa: build,
+pruebas, empaquetado y publicación pertenecen a esta misma ejecución. La
+Pipeline vuelve a validar rama, commit y tag, y conserva una ServiceAccount de
+release separada de CI. La aprobación del PR hacia `main` se exige únicamente
+para el cierre Stable, cuyo artefacto final se retiene antes del merge.
 
 ## 9. Contrato `nuget-stable-publication`
 
@@ -381,7 +382,9 @@ repositorio consumidor.
 Para generar un candidato se utiliza
 `scripts/run-release-candidate.sh <repository-url> [revision]`. La
 ejecución usa `eac-release`, pero no proyecta ningún Secret mientras el perfil
-no contenga una Task de publicación.
+no contenga una Task de publicación. Esta ejecución aislada no es un requisito
+previo para publicar un prerelease; se conserva para validaciones sin publicación
+y para producir el candidato estable retenido.
 
 Los perfiles de candidato y publicación utilizan un solo PVC efímero por
 `PipelineRun`. `source`, la caché de dependencias y `artifacts` son
@@ -392,7 +395,8 @@ PVC escribibles a una misma `TaskRun` y mantiene la portabilidad entre modos de
 
 Para publicar se utiliza `scripts/run-prerelease-publication.sh` con la URL,
 el SHA, la rama `release/*` y el tag prerelease. La Pipeline verifica nuevamente
-los tres valores remotos antes de que la Task con credenciales pueda ejecutarse.
+los tres valores remotos antes de que la Task con credenciales pueda ejecutarse
+y completa build, pruebas, candidato y publicación en una sola `PipelineRun`.
 
 La publicación estable utiliza `scripts/run-stable-publication.sh` con la URL,
 el SHA de `main`, el tag estable y los resultados del `PipelineRun` candidato.

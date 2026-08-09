@@ -17,7 +17,7 @@ EAC.Foundation, a un servicio concreto ni a una solución funcional.
 | Perfil | Recurso | Estado |
 |---|---|---|
 | NuGet CI | `eac-nuget-ci` | Implementado |
-| NuGet release candidate | `eac-nuget-release-candidate` | Implementado sin publicación |
+| NuGet release candidate | `eac-nuget-release-candidate` | Implementado sin publicación; reservado para verificación aislada y candidato estable |
 | NuGet prerelease publication | `eac-nuget-prerelease-publication` | Implementado con rama `release/*` y tag inmutable |
 | NuGet stable publication | `eac-nuget-stable-publication` | Implementado con `main`, tag estable y confirmación `Listed` |
 
@@ -87,8 +87,10 @@ inmutable que apunta exactamente al commit aprobado:
   v0.1.0-alpha.2
 ```
 
-La Pipeline repite validación, compilación, pruebas y empaquetado antes de
-publicar. Rechaza cualquier commit que no coincida simultáneamente con la rama
+Esta es la única `PipelineRun` necesaria para publicar Alpha, Beta o RC: valida,
+compila, prueba, crea el candidato y lo publica. No requiere ejecutar antes
+`eac-nuget-release-candidate`. Rechaza cualquier commit que no coincida
+simultáneamente con la rama
 `release/*` remota y el tag indicado. Obtiene la credencial exclusivamente del
 Secret `eac-release-publishing`, clave
 `nuget-api-key`, dentro de `eac-cicd`.
