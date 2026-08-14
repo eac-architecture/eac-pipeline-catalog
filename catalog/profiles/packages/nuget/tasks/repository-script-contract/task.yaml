@@ -54,6 +54,14 @@ spec:
           }
           bash -n "$path"
         done
+        [[ -s scripts/format-test-output.awk ]] || {
+          printf '[ERROR] Required test table formatter is missing: scripts/format-test-output.awk\n' >&2
+          exit 1
+        }
+        grep -qF 'TEST_OUTPUT' scripts/test.sh || {
+          printf '[ERROR] test.sh must implement the governed TEST_OUTPUT contract\n' >&2
+          exit 1
+        }
         if find .tekton -type f -name '*.yaml' -print0 2>/dev/null |
           xargs -0 -r grep -En '^[[:space:]]*(kind:[[:space:]]*(Pipeline|Task)|pipelineSpec:)' ; then
           printf '[ERROR] Components may bind catalog Pipelines but cannot implement Pipeline, Task or pipelineSpec\n' >&2

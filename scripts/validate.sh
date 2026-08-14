@@ -87,6 +87,10 @@ for entry_point in version.sh validate.sh build.sh test.sh ci.sh pack.sh release
         exit 1
     }
 done
+grep -qF 'format-test-output.awk' "$script_contract_task" || {
+    printf '[ERROR] NuGet script contract must require the canonical test table formatter\n' >&2
+    exit 1
+}
 for pipeline in "$ci_pipeline" "$release_pipeline" "$publication_pipeline" "$stable_publication_pipeline"; do
     grep -qF 'eac-nuget-repository-script-contract' "$pipeline" || {
         printf '[ERROR] NuGet Pipeline must enforce the repository script contract: %s\n' \
