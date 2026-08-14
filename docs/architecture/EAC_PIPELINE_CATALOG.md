@@ -207,6 +207,11 @@ El catálogo fija las imágenes de ejecución y la política de seguridad. El
 repositorio mantiene el contenido de los scripts, por lo que puede evolucionar
 sus reglas sin modificar la Pipeline compartida.
 
+Antes de `validate`, la Task `eac-nuget-repository-script-contract` comprueba la
+superficie Bash canónica, su sintaxis y el modo estricto. También rechaza que
+un componente implemente `Pipeline`, `Task` o `pipelineSpec`: `.tekton` es
+exclusivamente un binding hacia este catálogo.
+
 ## 7. Contrato `nuget-release-candidate`
 
 El repositorio consumidor amplía el contrato de CI con:
