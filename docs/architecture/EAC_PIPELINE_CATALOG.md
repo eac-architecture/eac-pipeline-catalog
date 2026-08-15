@@ -9,9 +9,9 @@ Las Pipelines implementan el
 [lineamiento transversal de ramas y releases](../../../governance/eac-engineering-governance/docs/standards/delivery/BRANCHING_AND_RELEASE_STANDARD.md);
 no definen una estrategia de ramas independiente.
 
-El catálogo no sustituye los scripts del producto. Cada repositorio conserva
-sus comandos Bash, reglas, código, pruebas y configuración. El catálogo solo
-orquesta contratos conocidos.
+El catálogo implementa las operaciones de CI y publicación por tipo de
+artefacto. Cada repositorio conserva código, pruebas, configuración declarativa
+y scripts auxiliares para uso local; Tekton no ejecuta esos scripts.
 
 ## 2. Identidad y límites
 
@@ -41,7 +41,7 @@ sequenceDiagram
     participant REPO as Consumer repository
     participant CATALOG as EAC Pipeline Catalog
     participant TEKTON as Tekton
-    participant SCRIPTS as Product Bash scripts
+    participant SDK as Catalog .NET Tasks
 
     DEV->>GIT: Push commit or open pull request
     GIT->>ENDPOINT: Send signed webhook event
@@ -56,16 +56,16 @@ sequenceDiagram
     CATALOG-->>PAC: Return immutable Tekton definitions
     PAC->>TEKTON: Create resolved PipelineRun
     TEKTON->>REPO: Checkout requested revision
-    TEKTON->>SCRIPTS: Execute validate, build and test
-    SCRIPTS-->>TEKTON: Return results and exit status
+    TEKTON->>SDK: Validate metadata, restore, build and test
+    SDK-->>TEKTON: Return results and exit status
     TEKTON-->>PAC: Publish execution status
     PAC-->>GIT: Update commit or pull-request check
 
     opt Manual execution
         DEV->>TEKTON: Run catalog scripts/run-ci.sh
         TEKTON->>REPO: Checkout repository and revision
-        TEKTON->>SCRIPTS: Execute the same CI contract
-        SCRIPTS-->>TEKTON: Return results and exit status
+        TEKTON->>SDK: Execute the same native .NET Tasks
+        SDK-->>TEKTON: Return results and exit status
         TEKTON-->>DEV: Stream logs and final status
     end
 ```
@@ -90,8 +90,8 @@ sequenceDiagram
 11. Las definiciones remotas se incorporan al `PipelineRun` resuelto.
 12. Tekton crea la ejecución dentro del namespace registrado.
 13. La primera Task obtiene el repositorio y resuelve el commit solicitado.
-14. Las siguientes Tasks invocan los scripts Bash del producto.
-15. Los scripts devuelven resultados pequeños y un código de salida.
+14. Las siguientes Tasks ejecutan directamente el contrato .NET del perfil.
+15. Las Tasks devuelven resultados pequeños y un código de salida.
 16. Tekton conserva estado, duración, logs y Results.
 17. Pipelines as Code publica el estado de la ejecución.
 18. El proveedor Git muestra el check en el commit o pull request.
@@ -203,14 +203,13 @@ checkout → validate → build → test --no-build
 | `revision` | commit, tag o rama que se debe resolver |
 | `configuration` | configuración .NET, `Release` por defecto |
 
-El catálogo fija las imágenes de ejecución y la política de seguridad. El
-repositorio mantiene el contenido de los scripts, por lo que puede evolucionar
-sus reglas sin modificar la Pipeline compartida.
-
-Antes de `validate`, la Task `eac-nuget-repository-script-contract` comprueba la
-superficie Bash canónica, su sintaxis y el modo estricto. También rechaza que
-un componente implemente `Pipeline`, `Task` o `pipelineSpec`: `.tekton` es
-exclusivamente un binding hacia este catálogo.
+El catálogo fija las imágenes, la política de seguridad y las operaciones
+`dotnet restore`, `format`, `build`, `test` y `pack`. El repositorio aporta solo
+el contrato declarativo: una solución raíz, `VERSION`, `global.json`,
+`NuGet.Config`, `.config/dotnet-tools.json` y un proyecto empaquetable bajo
+`src`. Los scripts Bash locales son auxiliares para desarrollo y nunca son
+invocados por Tekton. La validación también rechaza que un componente implemente
+`Pipeline`, `Task` o `pipelineSpec`: `.tekton` es exclusivamente un binding.
 
 ## 7. Contrato `nuget-release-candidate`
 
@@ -220,9 +219,8 @@ El repositorio consumidor amplía el contrato de CI con:
 VERSION
 .config/
 └── dotnet-tools.json
-scripts/
-├── pack.sh
-└── release-candidate.sh
+src/
+└── <un proyecto con IsPackable=true>
 ```
 
 ```mermaid
@@ -444,7 +442,7 @@ evidencia homogéneos con el resto de EAC.
 - ninguna Task copia credenciales Git dentro del workspace de código,
   dependencias o artefactos retenidos;
 - las revisiones del catálogo son inmutables;
-- los scripts del pull request se consideran código no confiable;
+- los scripts del pull request se consideran código no confiable y no se ejecutan;
 - release y deployment utilizarán Service Accounts distintas de CI.
 
 ## 14. Referencias NuGet

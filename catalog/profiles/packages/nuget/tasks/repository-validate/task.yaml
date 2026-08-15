@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/component: repository-validation
     app.kubernetes.io/version: 0.2.0
 spec:
-  description: Executes the repository scope and governance contract.
+  description: Validates the declarative contract of a .NET NuGet repository without invoking repository scripts.
   workspaces:
     - name: source
       description: Workspace containing the checked-out repository.
@@ -39,11 +39,20 @@ spec:
         set -euo pipefail
 
         status_file="$(results.validation-status.path)"
-        if bash ./scripts/validate.sh; then
-          package_version="$(tr -d '[:space:]' < VERSION)"
-          printf 'Succeeded' > "$status_file"
-          printf '%s' "$package_version" > "$(results.package-version.path)"
-        else
-          printf 'Failed' > "$status_file"
-          exit 1
+        fail() { printf 'Failed' > "$status_file"; printf '[ERROR] %s\n' "$1" >&2; exit 1; }
+        [[ -s VERSION ]] || fail 'VERSION is required'
+        package_version="$(tr -d '[:space:]' < VERSION)"
+        [[ "$package_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$ ]] || fail 'VERSION must be governed SemVer'
+        [[ -s global.json ]] || fail 'global.json is required'
+        [[ -s NuGet.Config ]] || fail 'NuGet.Config is required'
+        [[ -s .config/dotnet-tools.json ]] || fail '.config/dotnet-tools.json is required'
+        mapfile -t solutions < <(find . -maxdepth 1 -type f \( -name '*.sln' -o -name '*.slnx' \) -print)
+        [[ "${#solutions[@]}" -eq 1 ]] || fail 'Exactly one root solution is required'
+        mapfile -t packages < <(find src -type f -name '*.csproj' -exec grep -l '<IsPackable>true</IsPackable>' {} + 2>/dev/null)
+        [[ "${#packages[@]}" -eq 1 ]] || fail 'Exactly one packable project is required under src'
+        if find .tekton -type f -name '*.yaml' -print0 2>/dev/null | xargs -0 -r grep -En '^[[:space:]]*(kind:[[:space:]]*(Pipeline|Task)[[:space:]]*$|pipelineSpec:)'; then
+          fail 'Components may bind catalog Pipelines but cannot implement Pipeline, Task or pipelineSpec'
         fi
+        printf 'Succeeded' > "$status_file"
+        printf '%s' "$package_version" > "$(results.package-version.path)"
+        printf '[OK] Declarative NuGet repository contract validated\n'
