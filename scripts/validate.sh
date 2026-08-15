@@ -7,7 +7,6 @@ required_files=(
     "$root_dir/VERSION"
     "$root_dir/catalog/catalog.yaml"
     "$root_dir/catalog/shared/tasks/git-checkout/task.yaml"
-    "$root_dir/catalog/profiles/packages/nuget/tasks/repository-script-contract/task.yaml"
     "$root_dir/catalog/profiles/packages/nuget/pipelines/continuous-integration.yaml"
     "$root_dir/catalog/profiles/packages/nuget/pipelines/release-candidate.yaml"
     "$root_dir/catalog/profiles/packages/nuget/pipelines/prerelease-publication.yaml"
@@ -48,7 +47,7 @@ publication_pipeline="$root_dir/catalog/profiles/packages/nuget/pipelines/prerel
 stable_publication_pipeline="$root_dir/catalog/profiles/packages/nuget/pipelines/stable-publication.yaml"
 ci_pipeline="$root_dir/catalog/profiles/packages/nuget/pipelines/continuous-integration.yaml"
 checkout_task="$root_dir/catalog/shared/tasks/git-checkout/task.yaml"
-script_contract_task="$root_dir/catalog/profiles/packages/nuget/tasks/repository-script-contract/task.yaml"
+repository_validation_task="$root_dir/catalog/profiles/packages/nuget/tasks/repository-validate/task.yaml"
 release_gate_task="$root_dir/catalog/profiles/packages/nuget/tasks/release-revision-gate/task.yaml"
 if ! grep -A1 -qF 'name: HOME' "$checkout_task" ||
     ! grep -qF 'value: /tekton/home' "$checkout_task"; then
@@ -81,23 +80,24 @@ if grep -Eq 'name: (token|password|username)' "$checkout_task"; then
     printf '[ERROR] Git checkout credentials must come from the isolated Secret, not Task parameters\n' >&2
     exit 1
 fi
-for entry_point in version.sh validate.sh build.sh test.sh ci.sh pack.sh release-candidate.sh; do
-    grep -qF "$entry_point" "$script_contract_task" || {
-        printf '[ERROR] NuGet script contract must require %s\n' "$entry_point" >&2
-        exit 1
-    }
-done
-grep -qF 'format-test-output.awk' "$script_contract_task" || {
-    printf '[ERROR] NuGet script contract must require the canonical test table formatter\n' >&2
-    exit 1
-}
 for pipeline in "$ci_pipeline" "$release_pipeline" "$publication_pipeline" "$stable_publication_pipeline"; do
-    grep -qF 'eac-nuget-repository-script-contract' "$pipeline" || {
-        printf '[ERROR] NuGet Pipeline must enforce the repository script contract: %s\n' \
+    if grep -qF 'repository-script-contract' "$pipeline"; then
+        printf '[ERROR] NuGet Pipeline cannot depend on repository scripts: %s\n' \
             "${pipeline#"$root_dir"/}" >&2
         exit 1
+    fi
+done
+for declarative_input in VERSION global.json NuGet.Config .config/dotnet-tools.json IsPackable; do
+    grep -qF "$declarative_input" "$repository_validation_task" || {
+        printf '[ERROR] NuGet repository validation must require %s\n' "$declarative_input" >&2
+        exit 1
     }
 done
+if grep -R -nE 'bash ./scripts/|scripts/(validate|build|test|pack|release-candidate)\.sh' \
+    "$root_dir/catalog/profiles/packages/nuget"; then
+    printf '[ERROR] NuGet catalog Tasks must execute native .NET operations instead of repository scripts\n' >&2
+    exit 1
+fi
 grep -qF '$(tasks.validate.results.package-version)' "$release_pipeline" || {
     printf '[ERROR] Release candidate must resolve its version from repository validation\n' >&2
     exit 1

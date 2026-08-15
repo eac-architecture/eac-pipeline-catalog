@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/component: dotnet-build
     app.kubernetes.io/version: 0.2.0
 spec:
-  description: Executes the repository .NET build contract.
+  description: Restores, formats and builds the repository solution directly.
   params:
     - name: configuration
       type: string
@@ -53,9 +53,8 @@ spec:
         set -euo pipefail
 
         status_file="$(results.build-status.path)"
-        if bash ./scripts/build.sh; then
-          printf 'Succeeded' > "$status_file"
-        else
-          printf 'Failed' > "$status_file"
-          exit 1
-        fi
+        solution="$(find . -maxdepth 1 -type f \( -name '*.sln' -o -name '*.slnx' \) -print -quit)"
+        dotnet restore "$solution" --configfile NuGet.Config --locked-mode
+        dotnet format "$solution" --verify-no-changes --no-restore
+        dotnet build "$solution" --configuration "$BUILD_CONFIGURATION" --no-restore "-p:Version=$PACKAGE_VERSION"
+        printf 'Succeeded' > "$status_file"

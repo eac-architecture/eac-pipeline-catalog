@@ -52,9 +52,6 @@ spec:
         set -euo pipefail
 
         status_file="$(results.test-status.path)"
-        if bash ./scripts/test.sh --no-build; then
-          printf 'Succeeded' > "$status_file"
-        else
-          printf 'Failed' > "$status_file"
-          exit 1
-        fi
+        solution="$(find . -maxdepth 1 -type f \( -name '*.sln' -o -name '*.slnx' \) -print -quit)"
+        dotnet test --solution "$solution" --configuration "$BUILD_CONFIGURATION" --no-build --no-restore --no-ansi --no-progress --output Normal
+        printf 'Succeeded' > "$status_file"
