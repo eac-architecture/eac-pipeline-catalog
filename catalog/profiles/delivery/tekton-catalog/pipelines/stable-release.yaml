@@ -1,0 +1,47 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: eac-tekton-catalog-stable-release
+  labels:
+    app.kubernetes.io/name: eac-pipeline-catalog
+    app.kubernetes.io/component: tekton-catalog-release
+    app.kubernetes.io/version: 0.2.0
+spec:
+  params:
+    - name: repo-url
+      type: string
+    - name: revision
+      type: string
+    - name: version
+      type: string
+  workspaces:
+    - name: source
+  tasks:
+    - name: checkout
+      taskRef:
+        name: eac-git-checkout
+      params:
+        - name: repo-url
+          value: $(params.repo-url)
+        - name: revision
+          value: $(params.revision)
+      workspaces:
+        - name: source
+          workspace: source
+    - name: validate
+      runAfter: [checkout]
+      taskRef:
+        name: eac-tekton-catalog-validate-release
+      params:
+        - name: version
+          value: $(params.version)
+      workspaces:
+        - name: source
+          workspace: source
+  results:
+    - name: commit-sha
+      value: $(tasks.checkout.results.commit-sha)
+    - name: version
+      value: $(tasks.validate.results.version)
+    - name: validation-status
+      value: $(tasks.validate.results.validation-status)

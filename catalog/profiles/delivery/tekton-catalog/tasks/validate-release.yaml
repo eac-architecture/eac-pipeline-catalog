@@ -1,0 +1,32 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: eac-tekton-catalog-validate-release
+  labels:
+    app.kubernetes.io/name: eac-pipeline-catalog
+    app.kubernetes.io/component: tekton-catalog-release
+    app.kubernetes.io/version: 0.2.0
+spec:
+  params:
+    - name: version
+      type: string
+  workspaces:
+    - name: source
+  results:
+    - name: version
+    - name: validation-status
+  steps:
+    - name: validate
+      image: mcr.microsoft.com/dotnet/sdk:10.0.201
+      workingDir: $(workspaces.source.path)/repository
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+        declared="$(tr -d '[:space:]' < VERSION)"
+        [[ "$declared" == "$(params.version)" ]] || {
+          printf '[ERROR] VERSION %s does not match requested release %s\n' "$declared" "$(params.version)" >&2
+          exit 1
+        }
+        bash ./scripts/validate.sh
+        printf '%s' "$declared" > "$(results.version.path)"
+        printf 'Succeeded' > "$(results.validation-status.path)"
