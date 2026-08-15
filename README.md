@@ -18,7 +18,6 @@ EAC.Foundation, a un servicio concreto ni a una solución funcional.
 |---|---|---|
 | NuGet CI | `eac-nuget-ci` | Implementado |
 | NuGet release candidate | `eac-nuget-release-candidate` | Implementado sin publicación; reservado para verificación aislada y candidato estable |
-| Tekton Catalog stable release | `eac-tekton-catalog-stable-release` | Implementado; valida el commit y la versión en Tekton antes del tag y GitHub Release |
 | NuGet prerelease publication | `eac-nuget-prerelease-publication` | Implementado con rama `release/*` y tag inmutable |
 | NuGet stable publication | `eac-nuget-stable-publication` | Implementado con `main`, tag estable y confirmación `Listed` |
 
