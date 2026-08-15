@@ -28,6 +28,11 @@ orquesta contratos conocidos.
 Una versión del catálogo contiene varios perfiles. No se crea un repositorio
 por pipeline ni se publica un NuGet para envolver Tekton.
 
+El perfil `tekton-catalog` trata los YAML versionados como su artefacto. La
+consola ejecuta `eac-tekton-catalog-stable-release` sobre el SHA exacto de
+`main`; solo después de recibir resultados satisfactorios crea el tag y el
+GitHub Release. La validación local no constituye evidencia de release.
+
 ## 3. Modelo de reutilización
 
 ```mermaid

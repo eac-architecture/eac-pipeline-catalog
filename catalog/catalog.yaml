@@ -5,6 +5,12 @@ metadata:
 spec:
   version: 0.2.0
   profiles:
+    - name: tekton-catalog-stable-release
+      family: delivery
+      format: tekton-catalog
+      resource: eac-tekton-catalog-stable-release
+      path: catalog/profiles/delivery/tekton-catalog/pipelines/stable-release.yaml
+      status: implemented
     - name: nuget-ci
       family: packages
       format: nuget

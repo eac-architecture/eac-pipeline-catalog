@@ -21,6 +21,9 @@ required_files=(
     "$root_dir/scripts/run-release-candidate.sh"
     "$root_dir/scripts/run-prerelease-publication.sh"
     "$root_dir/scripts/run-stable-publication.sh"
+    "$root_dir/scripts/run-tekton-catalog-release.sh"
+    "$root_dir/catalog/profiles/delivery/tekton-catalog/tasks/validate-release.yaml"
+    "$root_dir/catalog/profiles/delivery/tekton-catalog/pipelines/stable-release.yaml"
     "$root_dir/scripts/clean.sh"
 )
 
@@ -36,7 +39,7 @@ for script in "$root_dir"/scripts/*.sh; do
     bash -n "$script"
 done
 
-task_count="$(find "$root_dir/catalog" -name 'task.yaml' -type f | wc -l | tr -d '[:space:]')"
+task_count="$(find "$root_dir/catalog" -path '*/tasks/*.yaml' -type f | wc -l | tr -d '[:space:]')"
 pipeline_count="$(find "$root_dir/catalog/profiles" -path '*/pipelines/*.yaml' -type f | wc -l | tr -d '[:space:]')"
 [[ "$task_count" -ge 1 && "$pipeline_count" -ge 1 ]] || {
     printf '[ERROR] The catalog must contain at least one Task and one Pipeline\n' >&2
