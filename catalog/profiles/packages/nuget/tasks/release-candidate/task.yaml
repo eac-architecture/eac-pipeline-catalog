@@ -63,12 +63,40 @@ spec:
         #!/usr/bin/env bash
         set -euo pipefail
 
-        bash ./scripts/release-candidate.sh
-
         artifacts_dir="$(workspaces.source.path)/artifacts"
-        package_file="$(find "$artifacts_dir/packages" -maxdepth 1 -type f -name '*.nupkg' | head -n 1)"
-        symbols_file="$(find "$artifacts_dir/packages" -maxdepth 1 -type f -name '*.snupkg' | head -n 1)"
+        packages_dir="$artifacts_dir/packages"
+        sbom_dir="$artifacts_dir/sbom"
+        evidence_dir="$artifacts_dir/evidence"
+        rm -rf "$packages_dir" "$sbom_dir" "$evidence_dir"
+        mkdir -p "$packages_dir" "$sbom_dir" "$evidence_dir"
+        project="$(find src -type f -name '*.csproj' -exec grep -l '<IsPackable>true</IsPackable>' {} + | head -n 1)"
+        package_id="$(sed -n 's:.*<PackageId>\([^<]*\)</PackageId>.*:\1:p' "$project" | head -n 1)"
+        [[ -n "$package_id" ]] || package_id="$(basename "$project" .csproj)"
+        [[ "$(git rev-parse HEAD)" == "$RELEASE_COMMIT" ]] || { printf '[ERROR] commit-sha must identify checked-out HEAD\n' >&2; exit 1; }
+        dotnet pack "$project" --configuration "$BUILD_CONFIGURATION" --no-build --no-restore -p:PackageVersion="$PACKAGE_VERSION" -p:PackageOutputPath="$packages_dir"
+        package_file="$packages_dir/$package_id.$PACKAGE_VERSION.nupkg"
+        symbols_file="$packages_dir/$package_id.$PACKAGE_VERSION.snupkg"
+        [[ -f "$package_file" && -f "$symbols_file" ]] || { printf '[ERROR] Candidate package inventory is incomplete\n' >&2; exit 1; }
+        smoke_dir="$(mktemp -d)"
+        trap 'rm -rf "$smoke_dir"' EXIT
+        cat > "$smoke_dir/Smoke.csproj" <<EOF
+        <Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup><ItemGroup><PackageReference Include="$package_id" Version="$PACKAGE_VERSION" /></ItemGroup></Project>
+        EOF
+        cat > "$smoke_dir/NuGet.Config" <<EOF
+        <configuration><packageSources><clear/><add key="candidate" value="$packages_dir"/><add key="nuget.org" value="https://api.nuget.org/v3/index.json"/></packageSources><packageSourceMapping><packageSource key="candidate"><package pattern="$package_id"/></packageSource><packageSource key="nuget.org"><package pattern="*"/></packageSource></packageSourceMapping></configuration>
+        EOF
+        printf 'internal static class Smoke { private static void Main() { } }\n' > "$smoke_dir/Program.cs"
+        dotnet restore "$smoke_dir/Smoke.csproj" --configfile "$smoke_dir/NuGet.Config" --no-cache
+        dotnet build "$smoke_dir/Smoke.csproj" --configuration Release --no-restore
+        dotnet tool restore --configfile NuGet.Config
+        dotnet tool run sbom-tool generate -b "$packages_dir" -bc . -pn "$package_id" -pv "$PACKAGE_VERSION" -ps 'Organization: EAC Architecture' -nsb 'https://github.com/eac-architecture/sbom'
+        dotnet tool run sbom-tool validate -b "$packages_dir" -o "$evidence_dir/sbom-validation.json" -mi SPDX:2.2
+        mkdir -p "$sbom_dir"
+        mv "$packages_dir/_manifest/spdx_2.2" "$sbom_dir/"
+        rm -rf "$packages_dir/_manifest"
         sbom_file="$artifacts_dir/sbom/spdx_2.2/manifest.spdx.json"
+        (cd "$artifacts_dir" && sha256sum "packages/$(basename "$package_file")" "packages/$(basename "$symbols_file")" 'sbom/spdx_2.2/manifest.spdx.json') > "$evidence_dir/checksums.sha256"
+        printf '{"packageId":"%s","version":"%s","commit":"%s","sbom":"SPDX-2.2","smokeTest":"Succeeded"}\n' "$package_id" "$PACKAGE_VERSION" "$RELEASE_COMMIT" > "$evidence_dir/release-evidence.json"
 
         basename "$package_file" | tr -d '\n' > "$(results.package-file.path)"
         sha256sum "$package_file" | awk '{printf $1}' > "$(results.package-sha256.path)"

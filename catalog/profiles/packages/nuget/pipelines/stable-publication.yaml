@@ -46,16 +46,8 @@ spec:
       workspaces:
         - name: source
           workspace: source
-    - name: script-contract
-      runAfter: [checkout]
-      taskRef:
-        kind: Task
-        name: eac-nuget-repository-script-contract
-      workspaces:
-        - name: source
-          workspace: source
     - name: validate
-      runAfter: [script-contract]
+      runAfter: [checkout]
       taskRef:
         kind: Task
         name: eac-repository-validate
