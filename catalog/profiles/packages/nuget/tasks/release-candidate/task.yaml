@@ -1,0 +1,77 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: eac-dotnet-release-candidate
+  labels:
+    app.kubernetes.io/name: eac-pipeline-catalog
+    app.kubernetes.io/component: dotnet-release-candidate
+    app.kubernetes.io/version: 0.2.0
+spec:
+  description: Creates and verifies a NuGet release candidate without publishing it.
+  params:
+    - name: version
+      type: string
+      description: Prerelease SemVer validated from the repository VERSION file.
+    - name: commit-sha
+      type: string
+      description: Immutable source revision recorded in the evidence.
+  workspaces:
+    - name: source
+      description: Workspace containing the repository, dependency cache and generated artifacts.
+  results:
+    - name: package-file
+      description: Generated NuGet package file name.
+    - name: package-sha256
+      description: SHA-256 digest of the NuGet package.
+    - name: symbols-file
+      description: Generated symbol package file name.
+    - name: sbom-sha256
+      description: SHA-256 digest of the SPDX SBOM.
+    - name: evidence-file
+      description: Relative path to the release evidence document.
+  stepTemplate:
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+      runAsGroup: 65532
+      runAsNonRoot: true
+      runAsUser: 65532
+  steps:
+    - name: create-candidate
+      image: mcr.microsoft.com/dotnet/sdk:10.0.201
+      workingDir: $(workspaces.source.path)/repository
+      env:
+        - name: PACKAGE_VERSION
+          value: $(params.version)
+        - name: RELEASE_COMMIT
+          value: $(params.commit-sha)
+        - name: BUILD_CONFIGURATION
+          value: Release
+        - name: CI
+          value: "true"
+        - name: DOTNET_CLI_HOME
+          value: $(workspaces.source.path)/.home/dotnet
+        - name: HOME
+          value: /tekton/home
+        - name: NUGET_PACKAGES
+          value: $(workspaces.source.path)/.nuget/packages
+        - name: ARTIFACTS_DIR
+          value: $(workspaces.source.path)/artifacts
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        bash ./scripts/release-candidate.sh
+
+        artifacts_dir="$(workspaces.source.path)/artifacts"
+        package_file="$(find "$artifacts_dir/packages" -maxdepth 1 -type f -name '*.nupkg' | head -n 1)"
+        symbols_file="$(find "$artifacts_dir/packages" -maxdepth 1 -type f -name '*.snupkg' | head -n 1)"
+        sbom_file="$artifacts_dir/sbom/spdx_2.2/manifest.spdx.json"
+
+        basename "$package_file" | tr -d '\n' > "$(results.package-file.path)"
+        sha256sum "$package_file" | awk '{printf $1}' > "$(results.package-sha256.path)"
+        basename "$symbols_file" | tr -d '\n' > "$(results.symbols-file.path)"
+        sha256sum "$sbom_file" | awk '{printf $1}' > "$(results.sbom-sha256.path)"
+        printf 'evidence/release-evidence.json' > "$(results.evidence-file.path)"

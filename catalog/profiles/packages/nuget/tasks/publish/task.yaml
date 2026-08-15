@@ -1,0 +1,192 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: eac-nuget-publish
+  labels:
+    app.kubernetes.io/name: eac-pipeline-catalog
+    app.kubernetes.io/component: nuget-publish
+    app.kubernetes.io/version: 0.2.0
+spec:
+  description: Publishes a verified NuGet package and confirms that its exact version is listed.
+  params:
+    - name: package-file
+      type: string
+    - name: package-version
+      type: string
+      description: Exact SemVer identity contained in the candidate package.
+    - name: package-source
+      type: string
+      default: https://api.nuget.org/v3/index.json
+  workspaces:
+    - name: artifacts
+  results:
+    - name: publication-status
+      description: Final registry state; the successful value is listed.
+  stepTemplate:
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+      runAsGroup: 65532
+      runAsNonRoot: true
+      runAsUser: 65532
+  steps:
+    - name: publish
+      image: mcr.microsoft.com/dotnet/sdk:10.0.201
+      env:
+        - name: NUGET_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: eac-release-publishing
+              key: nuget-api-key
+        - name: PACKAGE_FILE
+          value: $(params.package-file)
+        - name: PACKAGE_SOURCE
+          value: $(params.package-source)
+        - name: DOTNET_CLI_HOME
+          value: $(workspaces.artifacts.path)/.home/dotnet
+        - name: HOME
+          value: /tekton/home
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        package_path="$(workspaces.artifacts.path)/packages/$PACKAGE_FILE"
+        [[ -s "$package_path" ]] || {
+          printf '[ERROR] Candidate package is missing: %s\n' "$PACKAGE_FILE" >&2
+          exit 1
+        }
+        [[ -n "$NUGET_API_KEY" ]] || {
+          printf '[ERROR] NuGet.org publication credential is empty\n' >&2
+          exit 1
+        }
+        dotnet nuget push "$package_path" \
+          --source "$PACKAGE_SOURCE" \
+          --api-key "$NUGET_API_KEY" \
+          --skip-duplicate \
+          --force-english-output
+        printf '[OK] NuGet package accepted; waiting for registry listing\n'
+    - name: verify-listed
+      image: python:3.11.9-alpine3.20
+      env:
+        - name: PACKAGE_FILE
+          value: $(params.package-file)
+        - name: PACKAGE_VERSION
+          value: $(params.package-version)
+        - name: PACKAGE_SOURCE
+          value: $(params.package-source)
+        - name: PUBLICATION_STATUS_PATH
+          value: $(results.publication-status.path)
+      script: |
+        #!/usr/bin/env sh
+        set -eu
+
+        python - <<'PY'
+        import gzip
+        import json
+        import os
+        import sys
+        import time
+        from urllib.error import HTTPError, URLError
+        from urllib.parse import quote
+        from urllib.request import Request, urlopen
+
+        package_file = os.environ["PACKAGE_FILE"]
+        package_version = os.environ["PACKAGE_VERSION"]
+        package_source = os.environ["PACKAGE_SOURCE"]
+        result_path = os.environ["PUBLICATION_STATUS_PATH"]
+        suffix = f".{package_version}.nupkg"
+
+        if not package_file.lower().endswith(suffix.lower()):
+            print(
+                "[ERROR] Candidate file name does not match the declared package version",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        package_id = package_file[: -len(suffix)]
+
+        def read_json(url: str) -> dict:
+            request = Request(
+                url,
+                headers={
+                    "Accept": "application/json",
+                    "User-Agent": "EAC-Pipeline-Catalog/0.2",
+                },
+            )
+            with urlopen(request, timeout=15) as response:
+                payload = response.read()
+                if response.headers.get("Content-Encoding", "").lower() == "gzip":
+                    payload = gzip.decompress(payload)
+                return json.loads(payload.decode("utf-8"))
+
+        service_index = read_json(package_source)
+        registration_base = ""
+        preferred_types = (
+            "RegistrationsBaseUrl/3.6.0",
+            "RegistrationsBaseUrl/3.4.0",
+            "RegistrationsBaseUrl",
+        )
+        for preferred_type in preferred_types:
+            for resource in service_index.get("resources", []):
+                resource_types = resource.get("@type", [])
+                if isinstance(resource_types, str):
+                    resource_types = [resource_types]
+                if preferred_type in resource_types:
+                    registration_base = str(resource.get("@id", ""))
+                    break
+            if registration_base:
+                break
+        if not registration_base:
+            print(
+                "[ERROR] The package source does not advertise a NuGet registration resource",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        package_path = quote(package_id.lower(), safe=".")
+        version_path = quote(package_version.lower(), safe=".-")
+        registration_url = (
+            f"{registration_base.rstrip('/')}/{package_path}/{version_path}.json"
+        )
+        timeout_seconds = 1200
+        poll_seconds = 10
+        deadline = time.monotonic() + timeout_seconds
+        last_error = "registration metadata is not available"
+
+        while True:
+            try:
+                registration = read_json(registration_url)
+                listed = registration.get("listed", True)
+                if listed is True:
+                    with open(result_path, "w", encoding="utf-8") as result:
+                        result.write("listed")
+                    print(
+                        f"[OK] NuGet package is listed: {package_id} {package_version}"
+                    )
+                    break
+                print(
+                    f"[ERROR] NuGet package exists but is unlisted: "
+                    f"{package_id} {package_version}",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            except HTTPError as error:
+                if error.code != 404:
+                    last_error = f"registration API returned HTTP {error.code}"
+                else:
+                    last_error = "registration metadata is not indexed yet"
+            except (URLError, TimeoutError, OSError, ValueError, json.JSONDecodeError) as error:
+                last_error = str(error)
+
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                print(
+                    f"[ERROR] NuGet listing was not confirmed within "
+                    f"{timeout_seconds} seconds: {last_error}",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            print(f"[INFO] Waiting for NuGet listing: {last_error}")
+            time.sleep(min(poll_seconds, remaining))
+        PY

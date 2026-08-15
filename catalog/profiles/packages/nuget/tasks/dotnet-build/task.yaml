@@ -5,7 +5,7 @@ metadata:
   labels:
     app.kubernetes.io/name: eac-pipeline-catalog
     app.kubernetes.io/component: dotnet-build
-    app.kubernetes.io/version: 0.1.0
+    app.kubernetes.io/version: 0.2.0
 spec:
   description: Executes the repository .NET build contract.
   params:
@@ -13,6 +13,9 @@ spec:
       type: string
       default: Release
       description: .NET build configuration.
+    - name: package-version
+      type: string
+      description: SemVer resolved from the repository VERSION file.
   workspaces:
     - name: source
       description: Workspace containing the validated repository.
@@ -35,12 +38,14 @@ spec:
       env:
         - name: BUILD_CONFIGURATION
           value: $(params.configuration)
+        - name: PACKAGE_VERSION
+          value: $(params.package-version)
         - name: CI
           value: "true"
         - name: DOTNET_CLI_HOME
           value: $(workspaces.source.path)/.home/dotnet
         - name: HOME
-          value: $(workspaces.source.path)/.home
+          value: /tekton/home
         - name: NUGET_PACKAGES
           value: $(workspaces.source.path)/.nuget/packages
       script: |

@@ -5,7 +5,7 @@ metadata:
   labels:
     app.kubernetes.io/name: eac-pipeline-catalog
     app.kubernetes.io/component: repository-validation
-    app.kubernetes.io/version: 0.1.0
+    app.kubernetes.io/version: 0.2.0
 spec:
   description: Executes the repository scope and governance contract.
   workspaces:
@@ -14,6 +14,8 @@ spec:
   results:
     - name: validation-status
       description: Repository validation status.
+    - name: package-version
+      description: Prerelease SemVer resolved from the repository VERSION file.
   stepTemplate:
     securityContext:
       allowPrivilegeEscalation: false
@@ -31,14 +33,16 @@ spec:
         - name: CI
           value: "true"
         - name: HOME
-          value: $(workspaces.source.path)/.home
+          value: /tekton/home
       script: |
         #!/usr/bin/env bash
         set -euo pipefail
 
         status_file="$(results.validation-status.path)"
         if bash ./scripts/validate.sh; then
+          package_version="$(tr -d '[:space:]' < VERSION)"
           printf 'Succeeded' > "$status_file"
+          printf '%s' "$package_version" > "$(results.package-version.path)"
         else
           printf 'Failed' > "$status_file"
           exit 1

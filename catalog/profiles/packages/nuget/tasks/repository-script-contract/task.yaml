@@ -1,0 +1,71 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: eac-nuget-repository-script-contract
+  labels:
+    app.kubernetes.io/name: eac-pipeline-catalog
+    app.kubernetes.io/component: nuget-repository-script-contract
+    app.kubernetes.io/version: 0.2.0
+spec:
+  description: Validates the standardized Bash boundary owned by a NuGet repository.
+  workspaces:
+    - name: source
+      description: Workspace containing the checked-out consumer repository.
+  results:
+    - name: contract-status
+      description: NuGet repository script-contract validation status.
+  stepTemplate:
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: [ALL]
+      runAsGroup: 65532
+      runAsNonRoot: true
+      runAsUser: 65532
+  steps:
+    - name: validate-contract
+      image: mcr.microsoft.com/dotnet/sdk:10.0.201
+      workingDir: $(workspaces.source.path)/repository
+      env:
+        - name: HOME
+          value: /tekton/home
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        required=(version.sh validate.sh build.sh test.sh ci.sh pack.sh release-candidate.sh)
+        [[ -s VERSION ]] || {
+          printf '[ERROR] NuGet repositories must declare VERSION\n' >&2
+          exit 1
+        }
+        for name in "${required[@]}"; do
+          path="scripts/$name"
+          [[ -s "$path" ]] || {
+            printf '[ERROR] Required NuGet repository entry point is missing: %s\n' "$path" >&2
+            exit 1
+          }
+          head -n 1 "$path" | grep -Eq '^#!/usr/bin/env bash$' || {
+            printf '[ERROR] %s must use the portable Bash shebang\n' "$path" >&2
+            exit 1
+          }
+          grep -Eq '^set -euo pipefail$' "$path" || {
+            printf '[ERROR] %s must enable the governed strict Bash mode\n' "$path" >&2
+            exit 1
+          }
+          bash -n "$path"
+        done
+        [[ -s scripts/format-test-output.awk ]] || {
+          printf '[ERROR] Required test table formatter is missing: scripts/format-test-output.awk\n' >&2
+          exit 1
+        }
+        grep -qF 'TEST_OUTPUT' scripts/test.sh || {
+          printf '[ERROR] test.sh must implement the governed TEST_OUTPUT contract\n' >&2
+          exit 1
+        }
+        if find .tekton -type f -name '*.yaml' -print0 2>/dev/null |
+          xargs -0 -r grep -En '^[[:space:]]*(kind:[[:space:]]*(Pipeline|Task)|pipelineSpec:)' ; then
+          printf '[ERROR] Components may bind catalog Pipelines but cannot implement Pipeline, Task or pipelineSpec\n' >&2
+          exit 1
+        fi
+        printf 'Succeeded' > "$(results.contract-status.path)"
+        printf '[OK] NuGet repository script contract validated\n'
