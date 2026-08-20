@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/component: nuget-publish
     app.kubernetes.io/version: 0.2.0
 spec:
-  description: Publishes a verified NuGet package and confirms that its exact version is listed.
+  description: Publishes a verified NuGet package and optionally confirms that its exact version is listed.
   params:
     - name: package-file
       type: string
@@ -17,11 +17,15 @@ spec:
     - name: package-source
       type: string
       default: https://api.nuget.org/v3/index.json
+    - name: wait-for-listing
+      type: string
+      default: "false"
+      description: Set to true only for stable publication, which must finish in the Listed state.
   workspaces:
     - name: artifacts
   results:
     - name: publication-status
-      description: Final registry state; the successful value is listed.
+      description: Published after registry acceptance, or listed when listing confirmation is requested.
   stepTemplate:
     securityContext:
       allowPrivilegeEscalation: false
@@ -46,6 +50,10 @@ spec:
           value: $(params.package-source)
         - name: DOTNET_CLI_HOME
           value: $(workspaces.artifacts.path)/.home/dotnet
+        - name: WAIT_FOR_LISTING
+          value: $(params.wait-for-listing)
+        - name: PUBLICATION_STATUS_PATH
+          value: $(results.publication-status.path)
         - name: HOME
           value: /tekton/home
       script: |
@@ -66,8 +74,17 @@ spec:
           --api-key "$NUGET_API_KEY" \
           --skip-duplicate \
           --force-english-output
-        printf '[OK] NuGet package accepted; waiting for registry listing\n'
+        if [[ "$WAIT_FOR_LISTING" == "true" ]]; then
+          printf '[OK] NuGet package accepted; waiting for registry listing\n'
+        else
+          printf 'published' > "$PUBLICATION_STATUS_PATH"
+          printf '[OK] NuGet prerelease package accepted by the registry\n'
+        fi
     - name: verify-listed
+      when:
+        - input: $(params.wait-for-listing)
+          operator: in
+          values: ["true"]
       image: python:3.11.9-alpine3.20
       env:
         - name: PACKAGE_FILE

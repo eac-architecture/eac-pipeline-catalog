@@ -178,7 +178,20 @@ grep -qF 'RegistrationsBaseUrl/3.6.0' \
 }
 grep -qF 'result.write("listed")' \
     "$root_dir/catalog/profiles/packages/nuget/tasks/publish/task.yaml" || {
-    printf '[ERROR] NuGet publication must confirm the Listed registry state\n' >&2
+    printf '[ERROR] Stable NuGet publication must support the Listed registry state\n' >&2
+    exit 1
+}
+grep -qF "printf 'published'" \
+    "$root_dir/catalog/profiles/packages/nuget/tasks/publish/task.yaml" || {
+    printf '[ERROR] Prerelease NuGet publication must complete after registry acceptance\n' >&2
+    exit 1
+}
+grep -A3 -F 'name: wait-for-listing' "$publication_pipeline" | grep -qF 'value: "false"' || {
+    printf '[ERROR] Prerelease publication must not wait for Listed registry state\n' >&2
+    exit 1
+}
+grep -A3 -F 'name: wait-for-listing' "$stable_publication_pipeline" | grep -qF 'value: "true"' || {
+    printf '[ERROR] Stable publication must wait for Listed registry state\n' >&2
     exit 1
 }
 grep -qF '$(tasks.validate.results.package-version)' "$publication_pipeline" || {
