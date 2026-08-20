@@ -66,6 +66,8 @@ spec:
           value: $(params.release-tag)
         - name: package-version
           value: $(tasks.validate.results.package-version)
+        - name: wait-for-listing
+          value: "true"
         - name: publication-channel
           value: stable
       workspaces:
