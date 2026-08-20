@@ -270,7 +270,7 @@ flowchart LR
     BUILD --> PACKAGE[6. Recreate and verify candidate]
     PACKAGE --> SECRET[7. Read scoped NuGet key]
     SECRET --> PUBLISH[8. Publish to NuGet.org]
-    PUBLISH --> LISTED[9. Confirm Listed state]
+    PUBLISH --> ACCEPTED[9. Confirm registry acceptance]
 ```
 
 ### Orden explicado
@@ -287,14 +287,12 @@ flowchart LR
    `eac-release-publishing`.
 8. `dotnet nuget push` publica en NuGet.org con `--skip-duplicate`; ninguna
    clave aparece como parámetro, resultado o log.
-9. La Task descubre `RegistrationsBaseUrl` desde el Service Index y consulta la
-   versión exacta hasta confirmar `listed: true`. La espera está acotada a 20
-   minutos; una versión `Unlisted` o no indexada dentro del plazo hace fallar el
-   `PipelineRun`.
+9. El éxito de `dotnet nuget push` confirma que el registro aceptó la identidad
+   inmutable. Alpha, Beta y RC terminan en ese punto y no esperan la posterior
+   indexación o visibilidad `Listed`.
 
-El resultado `publication-status=listed` es la evidencia de cierre. La mera
-presencia en `PackageBaseAddress` no es suficiente porque ese recurso también
-enumera versiones no listadas.
+El resultado `publication-status=published` es la evidencia de cierre de un
+prerelease. La confirmación `Listed` se reserva para la promoción estable.
 
 La Pipeline no publica durante el CI ordinario. EAC Platform Console la invoca
 directamente desde la rama de estabilización tras la confirmación explícita

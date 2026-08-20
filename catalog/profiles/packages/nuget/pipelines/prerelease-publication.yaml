@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/component: nuget-prerelease-publication
     app.kubernetes.io/version: 0.2.0
 spec:
-  description: Revalidates an immutable tag, publishes the NuGet prerelease and confirms it is listed.
+  description: Revalidates an immutable tag and completes when the registry accepts the NuGet prerelease.
   params:
     - name: repo-url
       type: string
@@ -52,6 +52,8 @@ spec:
           value: $(params.release-tag)
         - name: package-version
           value: $(tasks.validate.results.package-version)
+        - name: wait-for-listing
+          value: "false"
         - name: publication-channel
           value: prerelease
       workspaces:

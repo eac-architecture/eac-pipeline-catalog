@@ -94,9 +94,10 @@ simultáneamente con la rama
 `release/*` remota y el tag indicado. Obtiene la credencial exclusivamente del
 Secret `eac-release-publishing`, clave
 `nuget-api-key`, dentro de `eac-cicd`.
-La ejecución solo termina correctamente cuando la Registration API confirma
-que la versión exacta está `Listed`; la espera de indexación está limitada a
-20 minutos.
+La ejecución termina cuando NuGet.org acepta la identidad prerelease. Alpha,
+Beta y RC no esperan la indexación posterior ni el estado `Listed`. La
+publicación estable sí conserva esa confirmación y su espera acotada a 20
+minutos.
 
 ## Publicación manual de la versión estable
 
