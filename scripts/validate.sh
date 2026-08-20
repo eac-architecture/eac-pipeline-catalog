@@ -212,14 +212,21 @@ grep -qF "printf 'published'" \
     printf '[ERROR] Prerelease NuGet publication must complete after registry acceptance\n' >&2
     exit 1
 }
-grep -A3 -F 'name: wait-for-listing' "$publication_pipeline" | grep -qF 'value: "false"' || {
+prerelease_publish_block="$(sed -n '/^    - name: publish$/,/^      workspaces:/p' "$publication_pipeline")"
+stable_publish_block="$(sed -n '/^    - name: publish$/,/^      workspaces:/p' "$stable_publication_pipeline")"
+all_non_publish_params="$(sed '/^    - name: publish$/,/^      workspaces:/d' "$publication_pipeline" "$stable_publication_pipeline")"
+printf '%s\n' "$prerelease_publish_block" | grep -A1 -F 'name: wait-for-listing' | grep -qF 'value: "false"' || {
     printf '[ERROR] Prerelease publication must not wait for Listed registry state\n' >&2
     exit 1
 }
-grep -A3 -F 'name: wait-for-listing' "$stable_publication_pipeline" | grep -qF 'value: "true"' || {
+printf '%s\n' "$stable_publish_block" | grep -A1 -F 'name: wait-for-listing' | grep -qF 'value: "true"' || {
     printf '[ERROR] Stable publication must wait for Listed registry state\n' >&2
     exit 1
 }
+if printf '%s\n' "$all_non_publish_params" | grep -qF 'name: wait-for-listing'; then
+    printf '[ERROR] wait-for-listing belongs only to the NuGet publish Task\n' >&2
+    exit 1
+fi
 grep -qF '$(tasks.validate.results.package-version)' "$publication_pipeline" || {
     printf '[ERROR] NuGet publication must verify the exact declared package version\n' >&2
     exit 1
