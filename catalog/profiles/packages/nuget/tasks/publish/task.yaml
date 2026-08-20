@@ -5,7 +5,7 @@ metadata:
   labels:
     app.kubernetes.io/name: eac-pipeline-catalog
     app.kubernetes.io/component: nuget-publish
-    app.kubernetes.io/version: 0.2.0
+    app.kubernetes.io/version: 0.4.1
 spec:
   description: Publishes a verified NuGet package and optionally confirms that its exact version is listed.
   params:

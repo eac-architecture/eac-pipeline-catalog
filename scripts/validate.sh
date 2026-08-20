@@ -42,6 +42,32 @@ pipeline_count="$(find "$root_dir/catalog/profiles" -path '*/pipelines/*.yaml' -
     exit 1
 }
 
+catalog_version="$(tr -d '[:space:]' < "$root_dir/VERSION")"
+[[ "$catalog_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+    printf '[ERROR] Pipeline Catalog VERSION must be stable SemVer\n' >&2
+    exit 1
+}
+grep -qF "version: $catalog_version" "$root_dir/catalog/catalog.yaml" || {
+    printf '[ERROR] catalog/catalog.yaml must match VERSION %s\n' "$catalog_version" >&2
+    exit 1
+}
+while IFS= read -r resource; do
+    grep -qF "app.kubernetes.io/version: $catalog_version" "$resource" || {
+        printf '[ERROR] Catalog resource metadata must match VERSION %s: %s\n' \
+            "$catalog_version" "${resource#"$root_dir"/}" >&2
+        exit 1
+    }
+done < <(find "$root_dir/catalog" -type f \( -name 'task.yaml' -o -path '*/pipelines/*.yaml' \))
+if grep -R -nE 'eac-pipeline-catalog/v[0-9]+\.[0-9]+\.[0-9]+/' \
+    "$root_dir/catalog/profiles" | grep -vF "eac-pipeline-catalog/v$catalog_version/"; then
+    printf '[ERROR] Pipeline task references must match VERSION %s\n' "$catalog_version" >&2
+    exit 1
+fi
+grep -qF 'label tasks,pipelines' "$root_dir/scripts/install.sh" || {
+    printf '[ERROR] Catalog installer must label installed resources from VERSION\n' >&2
+    exit 1
+}
+
 release_pipeline="$root_dir/catalog/profiles/packages/nuget/pipelines/release-candidate.yaml"
 publication_pipeline="$root_dir/catalog/profiles/packages/nuget/pipelines/prerelease-publication.yaml"
 stable_publication_pipeline="$root_dir/catalog/profiles/packages/nuget/pipelines/stable-publication.yaml"
