@@ -3,7 +3,7 @@ kind: PipelineCatalog
 metadata:
   name: eac-pipeline-catalog
 spec:
-  version: 0.4.1
+  version: 0.4.2
   profiles:
     - name: nuget-ci
       family: packages
