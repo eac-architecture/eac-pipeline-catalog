@@ -5,7 +5,7 @@ metadata:
   labels:
     app.kubernetes.io/name: eac-pipeline-catalog
     app.kubernetes.io/component: nuget-stable-candidate-gate
-    app.kubernetes.io/version: 0.4.2
+    app.kubernetes.io/version: 0.4.3
 spec:
   description: Verifies that main has the candidate source tree and promotes the previously verified NuGet artifacts without rebuilding.
   params:

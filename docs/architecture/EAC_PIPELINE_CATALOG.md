@@ -20,7 +20,7 @@ y scripts auxiliares para uso local; Tekton no ejecuta esos scripts.
 | repositorio | `eac-pipeline-catalog` |
 | entregable | catálogo Tekton versionado |
 | versión inicial | `0.1.0` |
-| versión en preparación | `0.4.2` |
+| versión en preparación | `0.4.3` |
 | propietario | EAC Platform |
 | consumidores | plataforma, herramientas, soluciones, servicios y cualquier repositorio compatible |
 | excluido | lógica de negocio, instalación de terceros y secretos |
@@ -170,6 +170,7 @@ tecnología. Las carpetas pendientes no se crean vacías.
 | Perfil | Artefacto objetivo | CI | Release | Estado |
 |---|---|---:|---:|---|
 | `packages/nuget` | `.nupkg`, `.snupkg`, SBOM y evidencia | sí | candidato, prerelease y estable implementados | implementado |
+| packages/nuget-kafka | mismo artefacto NuGet con pruebas contra Kafka efímero | sí, sin pods privilegiados | reutiliza el flujo NuGet | implementado |
 | `packages/npm` | paquete npm | planificado | planificado | pendiente |
 | `applications/angular` | aplicación web estática o imagen OCI | planificado | planificado | pendiente |
 | `services/dotnet` | imagen OCI de API, worker o gateway | planificado | planificado | pendiente |
@@ -211,6 +212,14 @@ el contrato declarativo: una solución raíz, `VERSION`, `global.json`,
 invocados por Tekton. La validación también rechaza que un componente implemente
 `Pipeline`, `Task` o `pipelineSpec`: `.tekton` es exclusivamente un binding.
 
+### Variante `nuget-kafka-ci`
+
+Los adaptadores NuGet que necesitan verificar un broker real reutilizan
+`eac-nuget-kafka-ci`. Conserva `checkout → validate → build → test` y sustituye
+únicamente la Task de pruebas por `eac-dotnet-test-kafka`, que aprovisiona Kafka
+como sidecar efímero no privilegiado y expone `KAFKA_BOOTSTRAP_SERVERS` al
+proceso de pruebas. El repositorio consumidor no define Pipelines, Tasks ni
+infraestructura Docker propia.
 ## 7. Contrato `nuget-release-candidate`
 
 El repositorio consumidor amplía el contrato de CI con:
