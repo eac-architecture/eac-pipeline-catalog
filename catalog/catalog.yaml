@@ -11,13 +11,7 @@ spec:
       resource: eac-nuget-ci
       path: catalog/profiles/packages/nuget/pipelines/continuous-integration.yaml
       status: implemented
-    - name: nuget-kafka-ci
-      family: packages
-      format: nuget
-      integration: kafka
-      resource: eac-nuget-kafka-ci
-      path: catalog/profiles/packages/nuget/pipelines/continuous-integration-kafka.yaml
-      status: implemented
+
     - name: nuget-release-candidate
       family: packages
       format: nuget

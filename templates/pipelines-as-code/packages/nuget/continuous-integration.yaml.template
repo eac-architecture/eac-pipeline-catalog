@@ -18,6 +18,8 @@ spec:
       value: "{{ revision }}"
     - name: configuration
       value: Release
+    - name: integration-profile
+      value: default
   taskRunTemplate:
     serviceAccountName: eac-ci
     podTemplate:
