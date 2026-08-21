@@ -153,7 +153,7 @@ if [[ -e "$root_dir/catalog/profiles/packages/nuget/pipelines/continuous-integra
     printf '[ERROR] Kafka integration must not create a second NuGet Pipeline\n' >&2
     exit 1
 fi
-for required in 'confluentinc/cp-kafka:7.7.1' 'KAFKA_BOOTSTRAP_SERVERS' 'allowPrivilegeEscalation: false' 'runAsNonRoot: true'; do
+for required in 'confluentinc/cp-kafka:7.7.1' 'KAFKA_BOOTSTRAP_SERVERS' 'allowPrivilegeEscalation: false' 'runAsNonRoot: true' 'runAsUser: 1000'; do
     grep -qF "$required" "$kafka_test_task" || {
         printf '[ERROR] NuGet Kafka test Task is missing %s\n' "$required" >&2
         exit 1

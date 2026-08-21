@@ -36,7 +36,9 @@ spec:
         capabilities:
           drop:
             - ALL
+        runAsGroup: 1000
         runAsNonRoot: true
+        runAsUser: 1000
       env:
         - name: CLUSTER_ID
           value: MkU3OEVBNTcwNTJENDM2Qk
