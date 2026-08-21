@@ -170,7 +170,6 @@ tecnología. Las carpetas pendientes no se crean vacías.
 | Perfil | Artefacto objetivo | CI | Release | Estado |
 |---|---|---:|---:|---|
 | `packages/nuget` | `.nupkg`, `.snupkg`, SBOM y evidencia | sí | candidato, prerelease y estable implementados | implementado |
-| packages/nuget-kafka | mismo artefacto NuGet con pruebas contra Kafka efímero | sí, sin pods privilegiados | reutiliza el flujo NuGet | implementado |
 | `packages/npm` | paquete npm | planificado | planificado | pendiente |
 | `applications/angular` | aplicación web estática o imagen OCI | planificado | planificado | pendiente |
 | `services/dotnet` | imagen OCI de API, worker o gateway | planificado | planificado | pendiente |
@@ -212,14 +211,15 @@ el contrato declarativo: una solución raíz, `VERSION`, `global.json`,
 invocados por Tekton. La validación también rechaza que un componente implemente
 `Pipeline`, `Task` o `pipelineSpec`: `.tekton` es exclusivamente un binding.
 
-### Variante `nuget-kafka-ci`
+### Integración Kafka opcional
 
-Los adaptadores NuGet que necesitan verificar un broker real reutilizan
-`eac-nuget-kafka-ci`. Conserva `checkout → validate → build → test` y sustituye
-únicamente la Task de pruebas por `eac-dotnet-test-kafka`, que aprovisiona Kafka
-como sidecar efímero no privilegiado y expone `KAFKA_BOOTSTRAP_SERVERS` al
-proceso de pruebas. El repositorio consumidor no define Pipelines, Tasks ni
-infraestructura Docker propia.
+Los adaptadores NuGet que necesitan verificar un broker real reutilizan la misma
+Pipeline `eac-nuget-ci` y seleccionan `integration-profile: kafka` en su binding.
+La ruta predeterminada ejecuta `eac-dotnet-test`; la ruta Kafka, mutuamente
+excluyente, ejecuta `eac-dotnet-test-kafka`, aprovisiona un sidecar efímero no
+privilegiado y expone `KAFKA_BOOTSTRAP_SERVERS` al proceso de pruebas. El
+repositorio consumidor no define Pipelines, Tasks ni infraestructura Docker
+propia.
 ## 7. Contrato `nuget-release-candidate`
 
 El repositorio consumidor amplía el contrato de CI con:
