@@ -17,6 +17,7 @@ EAC.Foundation, a un servicio concreto ni a una solución funcional.
 | Perfil | Recurso | Estado |
 |---|---|---|
 | NuGet CI | `eac-nuget-ci` | Implementado |
+| NuGet CI con Kafka efímero | `eac-nuget-kafka-ci` | Implementado sin privilegios para adaptadores que exigen broker real |
 | NuGet release candidate | `eac-nuget-release-candidate` | Implementado sin publicación; reservado para verificación aislada y candidato estable |
 | NuGet prerelease publication | `eac-nuget-prerelease-publication` | Implementado con rama `release/*` y tag inmutable |
 | NuGet stable publication | `eac-nuget-stable-publication` | Implementado con `main`, tag estable y confirmación `Listed` |

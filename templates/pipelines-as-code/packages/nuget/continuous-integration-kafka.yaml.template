@@ -1,16 +1,16 @@
 apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
-  name: __REPOSITORY_NAME__-ci
+  name: __REPOSITORY_NAME__-kafka-ci
   annotations:
     pipelinesascode.tekton.dev/on-event: "[pull_request, push]"
     pipelinesascode.tekton.dev/on-target-branch: "[main]"
     pipelinesascode.tekton.dev/max-keep-runs: "5"
     pipelinesascode.tekton.dev/pipeline: >-
-      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.4.3/catalog/profiles/packages/nuget/pipelines/continuous-integration.yaml
+      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.4.3/catalog/profiles/packages/nuget/pipelines/continuous-integration-kafka.yaml
 spec:
   pipelineRef:
-    name: eac-nuget-ci
+    name: eac-nuget-kafka-ci
   params:
     - name: repo-url
       value: "{{ source_url }}"

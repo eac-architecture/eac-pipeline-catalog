@@ -1,19 +1,19 @@
 apiVersion: tekton.dev/v1
 kind: Pipeline
 metadata:
-  name: eac-nuget-ci
+  name: eac-nuget-kafka-ci
   annotations:
     pipelinesascode.tekton.dev/task: >-
       [https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.4.3/catalog/shared/tasks/git-checkout/task.yaml,
       https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.4.3/catalog/profiles/packages/nuget/tasks/repository-validate/task.yaml,
       https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.4.3/catalog/profiles/packages/nuget/tasks/dotnet-build/task.yaml,
-      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.4.3/catalog/profiles/packages/nuget/tasks/dotnet-test/task.yaml]
+      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.4.3/catalog/profiles/packages/nuget/tasks/dotnet-test-kafka/task.yaml]
   labels:
     app.kubernetes.io/name: eac-pipeline-catalog
-    app.kubernetes.io/component: nuget-ci
+    app.kubernetes.io/component: nuget-kafka-ci
     app.kubernetes.io/version: 0.4.3
 spec:
-  description: Executes the reusable continuous integration contract for a .NET NuGet repository.
+  description: Executes the reusable continuous integration contract for a .NET NuGet repository against ephemeral Kafka.
   params:
     - name: repo-url
       type: string
@@ -70,7 +70,7 @@ spec:
         - build
       taskRef:
         kind: Task
-        name: eac-dotnet-test
+        name: eac-dotnet-test-kafka
       params:
         - name: configuration
           value: $(params.configuration)

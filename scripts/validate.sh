@@ -8,11 +8,14 @@ required_files=(
     "$root_dir/catalog/catalog.yaml"
     "$root_dir/catalog/shared/tasks/git-checkout/task.yaml"
     "$root_dir/catalog/profiles/packages/nuget/pipelines/continuous-integration.yaml"
+    "$root_dir/catalog/profiles/packages/nuget/pipelines/continuous-integration-kafka.yaml"
+    "$root_dir/catalog/profiles/packages/nuget/tasks/dotnet-test-kafka/task.yaml"
     "$root_dir/catalog/profiles/packages/nuget/pipelines/release-candidate.yaml"
     "$root_dir/catalog/profiles/packages/nuget/pipelines/prerelease-publication.yaml"
     "$root_dir/catalog/profiles/packages/nuget/pipelines/stable-publication.yaml"
     "$root_dir/catalog/profiles/packages/nuget/tasks/stable-candidate-gate/task.yaml"
     "$root_dir/templates/pipelines-as-code/packages/nuget/continuous-integration.yaml.template"
+    "$root_dir/templates/pipelines-as-code/packages/nuget/continuous-integration-kafka.yaml.template"
     "$root_dir/docs/architecture/EAC_PIPELINE_CATALOG.md"
     "$root_dir/docs/planning/PLAN_DE_IMPLEMENTACION.md"
     "$root_dir/scripts/install.sh"
@@ -72,6 +75,8 @@ release_pipeline="$root_dir/catalog/profiles/packages/nuget/pipelines/release-ca
 publication_pipeline="$root_dir/catalog/profiles/packages/nuget/pipelines/prerelease-publication.yaml"
 stable_publication_pipeline="$root_dir/catalog/profiles/packages/nuget/pipelines/stable-publication.yaml"
 ci_pipeline="$root_dir/catalog/profiles/packages/nuget/pipelines/continuous-integration.yaml"
+kafka_ci_pipeline="$root_dir/catalog/profiles/packages/nuget/pipelines/continuous-integration-kafka.yaml"
+kafka_test_task="$root_dir/catalog/profiles/packages/nuget/tasks/dotnet-test-kafka/task.yaml"
 checkout_task="$root_dir/catalog/shared/tasks/git-checkout/task.yaml"
 repository_validation_task="$root_dir/catalog/profiles/packages/nuget/tasks/repository-validate/task.yaml"
 release_gate_task="$root_dir/catalog/profiles/packages/nuget/tasks/release-revision-gate/task.yaml"
@@ -106,7 +111,7 @@ if grep -Eq 'name: (token|password|username)' "$checkout_task"; then
     printf '[ERROR] Git checkout credentials must come from the isolated Secret, not Task parameters\n' >&2
     exit 1
 fi
-for pipeline in "$ci_pipeline" "$release_pipeline" "$publication_pipeline" "$stable_publication_pipeline"; do
+for pipeline in "$ci_pipeline" "$kafka_ci_pipeline" "$release_pipeline" "$publication_pipeline" "$stable_publication_pipeline"; do
     if grep -qF 'repository-script-contract' "$pipeline"; then
         printf '[ERROR] NuGet Pipeline cannot depend on repository scripts: %s\n' \
             "${pipeline#"$root_dir"/}" >&2
@@ -132,6 +137,20 @@ grep -qF '$(tasks.validate.results.package-version)' "$ci_pipeline" || {
     printf '[ERROR] NuGet CI must resolve its version from repository validation\n' >&2
     exit 1
 }
+grep -qF 'eac-dotnet-test-kafka' "$kafka_ci_pipeline" || {
+    printf '[ERROR] NuGet Kafka CI must use the reusable Kafka test Task\n' >&2
+    exit 1
+}
+for required in 'confluentinc/cp-kafka:7.7.1' 'KAFKA_BOOTSTRAP_SERVERS' 'allowPrivilegeEscalation: false' 'runAsNonRoot: true'; do
+    grep -qF "$required" "$kafka_test_task" || {
+        printf '[ERROR] NuGet Kafka test Task is missing %s\n' "$required" >&2
+        exit 1
+    }
+done
+if grep -qF 'privileged: true' "$kafka_test_task"; then
+    printf '[ERROR] NuGet Kafka test Task cannot require privileged containers\n' >&2
+    exit 1
+fi
 if grep -qF '$(params.version)' "$release_pipeline" ||
     grep -q -- '--param "version=' "$root_dir/scripts/run-release-candidate.sh"; then
     printf '[ERROR] Release candidate cannot accept a free version parameter\n' >&2
