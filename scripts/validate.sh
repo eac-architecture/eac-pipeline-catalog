@@ -134,6 +134,10 @@ grep -qF '$(tasks.validate.results.package-version)' "$ci_pipeline" || {
     printf '[ERROR] NuGet CI must resolve its version from repository validation\n' >&2
     exit 1
 }
+grep -qF 'integration-profile=$integration_profile' "$root_dir/scripts/run-ci.sh" || {
+    printf '[ERROR] Manual NuGet CI runner must forward integration-profile\n' >&2
+    exit 1
+}
 for required in 'name: integration-profile' 'name: test-default' 'name: test-kafka' 'eac-dotnet-test-kafka'; do
     grep -qF "$required" "$ci_pipeline" || {
         printf '[ERROR] NuGet CI is missing optional integration routing: %s\n' "$required" >&2
