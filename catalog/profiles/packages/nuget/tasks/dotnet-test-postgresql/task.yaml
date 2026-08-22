@@ -1,13 +1,13 @@
 apiVersion: tekton.dev/v1
 kind: Task
 metadata:
-  name: eac-dotnet-test
+  name: eac-dotnet-test-postgresql
   labels:
     app.kubernetes.io/name: eac-pipeline-catalog
-    app.kubernetes.io/component: dotnet-test
+    app.kubernetes.io/component: dotnet-test-postgresql
     app.kubernetes.io/version: 0.4.5
 spec:
-  description: Executes automated tests against the existing .NET build.
+  description: Executes .NET tests against an ephemeral non-privileged PostgreSQL database.
   params:
     - name: configuration
       type: string
@@ -28,6 +28,26 @@ spec:
       runAsGroup: 65532
       runAsNonRoot: true
       runAsUser: 65532
+  sidecars:
+    - name: postgresql
+      image: postgres:17.6-alpine3.22
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+        runAsGroup: 70
+        runAsNonRoot: true
+        runAsUser: 70
+      env:
+        - name: POSTGRES_DB
+          value: eac_test
+        - name: POSTGRES_USER
+          value: eac
+        - name: POSTGRES_PASSWORD
+          value: eac-test-password
+        - name: PGDATA
+          value: /tmp/postgresql/data
   steps:
     - name: test
       image: mcr.microsoft.com/dotnet/sdk:10.0.201
@@ -39,6 +59,8 @@ spec:
           value: "true"
         - name: DOTNET_CLI_HOME
           value: $(workspaces.source.path)/.home/dotnet
+        - name: EAC_POSTGRES_CONNECTION_STRING
+          value: Host=127.0.0.1;Port=5432;Database=eac_test;Username=eac;Password=eac-test-password
         - name: HOME
           value: /tekton/home
         - name: NUGET_PACKAGES
@@ -52,6 +74,20 @@ spec:
         set -euo pipefail
 
         status_file="$(results.test-status.path)"
+        ready=false
+        for _ in $(seq 1 60); do
+          if (echo > /dev/tcp/127.0.0.1/5432) >/dev/null 2>&1; then
+            ready=true
+            break
+          fi
+          sleep 1
+        done
+        [[ "$ready" == "true" ]] || {
+          printf 'Failed' > "$status_file"
+          printf '[ERROR] Ephemeral PostgreSQL database did not become ready\n' >&2
+          exit 1
+        }
+
         solution="$(find . -maxdepth 1 -type f \( -name '*.sln' -o -name '*.slnx' \) -print -quit)"
         dotnet test --solution "$solution" --configuration "$BUILD_CONFIGURATION" --no-build --no-restore --no-ansi --no-progress --output Normal
         printf 'Succeeded' > "$status_file"
