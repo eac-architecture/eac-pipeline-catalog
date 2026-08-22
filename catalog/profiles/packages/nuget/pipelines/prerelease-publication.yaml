@@ -5,7 +5,7 @@ metadata:
   labels:
     app.kubernetes.io/name: eac-pipeline-catalog
     app.kubernetes.io/component: nuget-prerelease-publication
-    app.kubernetes.io/version: 0.4.3
+    app.kubernetes.io/version: 0.4.4
 spec:
   description: Revalidates an immutable tag and completes when the registry accepts the NuGet prerelease.
   params:
@@ -17,6 +17,10 @@ spec:
       type: string
     - name: release-tag
       type: string
+    - name: integration-profile
+      type: string
+      default: default
+      description: Optional integration environment required by the repository tests.
   workspaces:
     - name: source
   tasks:
@@ -37,6 +41,9 @@ spec:
       taskRef:
         kind: Task
         name: eac-repository-validate
+      params:
+        - name: integration-profile
+          value: $(params.integration-profile)
       workspaces:
         - name: source
           workspace: source
@@ -70,8 +77,12 @@ spec:
       workspaces:
         - name: source
           workspace: source
-    - name: test
+    - name: test-default
       runAfter: [build]
+      when:
+        - input: $(params.integration-profile)
+          operator: in
+          values: [default]
       taskRef:
         kind: Task
         name: eac-dotnet-test
@@ -81,8 +92,23 @@ spec:
       workspaces:
         - name: source
           workspace: source
+    - name: test-kafka
+      runAfter: [build]
+      when:
+        - input: $(params.integration-profile)
+          operator: in
+          values: [kafka]
+      taskRef:
+        kind: Task
+        name: eac-dotnet-test-kafka
+      params:
+        - name: configuration
+          value: Release
+      workspaces:
+        - name: source
+          workspace: source
     - name: create-candidate
-      runAfter: [test]
+      runAfter: [test-default, test-kafka]
       taskRef:
         kind: Task
         name: eac-dotnet-release-candidate

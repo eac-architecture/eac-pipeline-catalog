@@ -134,20 +134,30 @@ grep -qF '$(tasks.validate.results.package-version)' "$ci_pipeline" || {
     printf '[ERROR] NuGet CI must resolve its version from repository validation\n' >&2
     exit 1
 }
-grep -qF 'integration-profile=$integration_profile' "$root_dir/scripts/run-ci.sh" || {
-    printf '[ERROR] Manual NuGet CI runner must forward integration-profile\n' >&2
-    exit 1
-}
-for required in 'name: integration-profile' 'name: test-default' 'name: test-kafka' 'eac-dotnet-test-kafka'; do
-    grep -qF "$required" "$ci_pipeline" || {
-        printf '[ERROR] NuGet CI is missing optional integration routing: %s\n' "$required" >&2
+for runner in \
+    "$root_dir/scripts/run-ci.sh" \
+    "$root_dir/scripts/run-release-candidate.sh" \
+    "$root_dir/scripts/run-prerelease-publication.sh"; do
+    grep -qF 'integration-profile=$integration_profile' "$runner" || {
+        printf '[ERROR] NuGet runner must forward integration-profile: %s\n' \
+            "${runner#"$root_dir"/}" >&2
         exit 1
     }
 done
-[[ "$(grep -cF 'input: $(params.integration-profile)' "$ci_pipeline")" -eq 2 ]] || {
-    printf '[ERROR] NuGet CI must select exactly one test Task from integration-profile\n' >&2
-    exit 1
-}
+for integration_pipeline in "$ci_pipeline" "$release_pipeline" "$publication_pipeline"; do
+    for required in 'name: integration-profile' 'name: test-default' 'name: test-kafka' 'eac-dotnet-test-kafka'; do
+        grep -qF "$required" "$integration_pipeline" || {
+            printf '[ERROR] NuGet Pipeline is missing optional integration routing: %s (%s)\n' \
+                "$required" "${integration_pipeline#"$root_dir"/}" >&2
+            exit 1
+        }
+    done
+    [[ "$(grep -cF 'input: $(params.integration-profile)' "$integration_pipeline")" -eq 2 ]] || {
+        printf '[ERROR] NuGet Pipeline must select exactly one test Task from integration-profile: %s\n' \
+            "${integration_pipeline#"$root_dir"/}" >&2
+        exit 1
+    }
+done
 if [[ -e "$root_dir/catalog/profiles/packages/nuget/pipelines/continuous-integration-kafka.yaml" ]] ||
     [[ -e "$root_dir/templates/pipelines-as-code/packages/nuget/continuous-integration-kafka.yaml.template" ]]; then
     printf '[ERROR] Kafka integration must not create a second NuGet Pipeline\n' >&2
