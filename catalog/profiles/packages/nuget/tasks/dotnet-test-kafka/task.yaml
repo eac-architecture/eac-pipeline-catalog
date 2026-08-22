@@ -1,0 +1,109 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: eac-dotnet-test-kafka
+  labels:
+    app.kubernetes.io/name: eac-pipeline-catalog
+    app.kubernetes.io/component: dotnet-test-kafka
+    app.kubernetes.io/version: 0.4.3
+spec:
+  description: Executes .NET tests against an ephemeral non-privileged Kafka broker.
+  params:
+    - name: configuration
+      type: string
+      default: Release
+      description: .NET build configuration.
+  workspaces:
+    - name: source
+      description: Workspace containing the built repository.
+  results:
+    - name: test-status
+      description: Automated test status.
+  stepTemplate:
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+      runAsGroup: 65532
+      runAsNonRoot: true
+      runAsUser: 65532
+  sidecars:
+    - name: kafka
+      image: confluentinc/cp-kafka:7.7.1
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+      env:
+        - name: CLUSTER_ID
+          value: MkU3OEVBNTcwNTJENDM2Qk
+        - name: KAFKA_NODE_ID
+          value: "1"
+        - name: KAFKA_PROCESS_ROLES
+          value: broker,controller
+        - name: KAFKA_LISTENERS
+          value: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+        - name: KAFKA_ADVERTISED_LISTENERS
+          value: PLAINTEXT://127.0.0.1:9092
+        - name: KAFKA_CONTROLLER_LISTENER_NAMES
+          value: CONTROLLER
+        - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+          value: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+        - name: KAFKA_CONTROLLER_QUORUM_VOTERS
+          value: 1@127.0.0.1:9093
+        - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+          value: "1"
+        - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+          value: "1"
+        - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+          value: "1"
+        - name: KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS
+          value: "0"
+  steps:
+    - name: test
+      image: mcr.microsoft.com/dotnet/sdk:10.0.201
+      workingDir: $(workspaces.source.path)/repository
+      env:
+        - name: BUILD_CONFIGURATION
+          value: $(params.configuration)
+        - name: CI
+          value: "true"
+        - name: DOTNET_CLI_HOME
+          value: $(workspaces.source.path)/.home/dotnet
+        - name: HOME
+          value: /tekton/home
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          value: 127.0.0.1:9092
+        - name: NUGET_PACKAGES
+          value: $(workspaces.source.path)/.nuget/packages
+        - name: TEST_COLOR
+          value: Never
+        - name: TEST_OUTPUT
+          value: Table
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        status_file="$(results.test-status.path)"
+        ready=false
+        for _ in $(seq 1 60); do
+          if (echo > /dev/tcp/127.0.0.1/9092) >/dev/null 2>&1; then
+            ready=true
+            break
+          fi
+          sleep 1
+        done
+        [[ "$ready" == "true" ]] || {
+          printf 'Failed' > "$status_file"
+          printf '[ERROR] Ephemeral Kafka broker did not become ready\n' >&2
+          exit 1
+        }
+
+        solution="$(find . -maxdepth 1 -type f \( -name '*.sln' -o -name '*.slnx' \) -print -quit)"
+        dotnet test --solution "$solution" --configuration "$BUILD_CONFIGURATION" --no-build --no-restore --no-ansi --no-progress --output Normal
+        printf 'Succeeded' > "$status_file"

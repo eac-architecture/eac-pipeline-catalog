@@ -8,6 +8,7 @@ required_files=(
     "$root_dir/catalog/catalog.yaml"
     "$root_dir/catalog/shared/tasks/git-checkout/task.yaml"
     "$root_dir/catalog/profiles/packages/nuget/pipelines/continuous-integration.yaml"
+    "$root_dir/catalog/profiles/packages/nuget/tasks/dotnet-test-kafka/task.yaml"
     "$root_dir/catalog/profiles/packages/nuget/pipelines/release-candidate.yaml"
     "$root_dir/catalog/profiles/packages/nuget/pipelines/prerelease-publication.yaml"
     "$root_dir/catalog/profiles/packages/nuget/pipelines/stable-publication.yaml"
@@ -72,6 +73,7 @@ release_pipeline="$root_dir/catalog/profiles/packages/nuget/pipelines/release-ca
 publication_pipeline="$root_dir/catalog/profiles/packages/nuget/pipelines/prerelease-publication.yaml"
 stable_publication_pipeline="$root_dir/catalog/profiles/packages/nuget/pipelines/stable-publication.yaml"
 ci_pipeline="$root_dir/catalog/profiles/packages/nuget/pipelines/continuous-integration.yaml"
+kafka_test_task="$root_dir/catalog/profiles/packages/nuget/tasks/dotnet-test-kafka/task.yaml"
 checkout_task="$root_dir/catalog/shared/tasks/git-checkout/task.yaml"
 repository_validation_task="$root_dir/catalog/profiles/packages/nuget/tasks/repository-validate/task.yaml"
 release_gate_task="$root_dir/catalog/profiles/packages/nuget/tasks/release-revision-gate/task.yaml"
@@ -132,6 +134,35 @@ grep -qF '$(tasks.validate.results.package-version)' "$ci_pipeline" || {
     printf '[ERROR] NuGet CI must resolve its version from repository validation\n' >&2
     exit 1
 }
+grep -qF 'integration-profile=$integration_profile' "$root_dir/scripts/run-ci.sh" || {
+    printf '[ERROR] Manual NuGet CI runner must forward integration-profile\n' >&2
+    exit 1
+}
+for required in 'name: integration-profile' 'name: test-default' 'name: test-kafka' 'eac-dotnet-test-kafka'; do
+    grep -qF "$required" "$ci_pipeline" || {
+        printf '[ERROR] NuGet CI is missing optional integration routing: %s\n' "$required" >&2
+        exit 1
+    }
+done
+[[ "$(grep -cF 'input: $(params.integration-profile)' "$ci_pipeline")" -eq 2 ]] || {
+    printf '[ERROR] NuGet CI must select exactly one test Task from integration-profile\n' >&2
+    exit 1
+}
+if [[ -e "$root_dir/catalog/profiles/packages/nuget/pipelines/continuous-integration-kafka.yaml" ]] ||
+    [[ -e "$root_dir/templates/pipelines-as-code/packages/nuget/continuous-integration-kafka.yaml.template" ]]; then
+    printf '[ERROR] Kafka integration must not create a second NuGet Pipeline\n' >&2
+    exit 1
+fi
+for required in 'confluentinc/cp-kafka:7.7.1' 'KAFKA_BOOTSTRAP_SERVERS' 'allowPrivilegeEscalation: false' 'runAsNonRoot: true' 'runAsUser: 1000'; do
+    grep -qF "$required" "$kafka_test_task" || {
+        printf '[ERROR] NuGet Kafka test Task is missing %s\n' "$required" >&2
+        exit 1
+    }
+done
+if grep -qF 'privileged: true' "$kafka_test_task"; then
+    printf '[ERROR] NuGet Kafka test Task cannot require privileged containers\n' >&2
+    exit 1
+fi
 if grep -qF '$(params.version)' "$release_pipeline" ||
     grep -q -- '--param "version=' "$root_dir/scripts/run-release-candidate.sh"; then
     printf '[ERROR] Release candidate cannot accept a free version parameter\n' >&2

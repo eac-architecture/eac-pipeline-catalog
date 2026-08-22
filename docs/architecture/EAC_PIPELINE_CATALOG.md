@@ -20,7 +20,7 @@ y scripts auxiliares para uso local; Tekton no ejecuta esos scripts.
 | repositorio | `eac-pipeline-catalog` |
 | entregable | catálogo Tekton versionado |
 | versión inicial | `0.1.0` |
-| versión en preparación | `0.4.2` |
+| versión en preparación | `0.4.3` |
 | propietario | EAC Platform |
 | consumidores | plataforma, herramientas, soluciones, servicios y cualquier repositorio compatible |
 | excluido | lógica de negocio, instalación de terceros y secretos |
@@ -211,6 +211,15 @@ el contrato declarativo: una solución raíz, `VERSION`, `global.json`,
 invocados por Tekton. La validación también rechaza que un componente implemente
 `Pipeline`, `Task` o `pipelineSpec`: `.tekton` es exclusivamente un binding.
 
+### Integración Kafka opcional
+
+Los adaptadores NuGet que necesitan verificar un broker real reutilizan la misma
+Pipeline `eac-nuget-ci` y seleccionan `integration-profile: kafka` en su binding.
+La ruta predeterminada ejecuta `eac-dotnet-test`; la ruta Kafka, mutuamente
+excluyente, ejecuta `eac-dotnet-test-kafka`, aprovisiona un sidecar efímero no
+privilegiado y expone `KAFKA_BOOTSTRAP_SERVERS` al proceso de pruebas. El
+repositorio consumidor no define Pipelines, Tasks ni infraestructura Docker
+propia.
 ## 7. Contrato `nuget-release-candidate`
 
 El repositorio consumidor amplía el contrato de CI con:

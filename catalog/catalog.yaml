@@ -3,7 +3,7 @@ kind: PipelineCatalog
 metadata:
   name: eac-pipeline-catalog
 spec:
-  version: 0.4.2
+  version: 0.4.3
   profiles:
     - name: nuget-ci
       family: packages
@@ -11,6 +11,7 @@ spec:
       resource: eac-nuget-ci
       path: catalog/profiles/packages/nuget/pipelines/continuous-integration.yaml
       status: implemented
+
     - name: nuget-release-candidate
       family: packages
       format: nuget

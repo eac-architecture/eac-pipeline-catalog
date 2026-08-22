@@ -5,9 +5,14 @@ metadata:
   labels:
     app.kubernetes.io/name: eac-pipeline-catalog
     app.kubernetes.io/component: repository-validation
-    app.kubernetes.io/version: 0.4.2
+    app.kubernetes.io/version: 0.4.3
 spec:
   description: Validates the declarative contract of a .NET NuGet repository without invoking repository scripts.
+  params:
+    - name: integration-profile
+      type: string
+      default: default
+      description: Optional integration environment selected by the NuGet CI Pipeline.
   workspaces:
     - name: source
       description: Workspace containing the checked-out repository.
@@ -34,12 +39,15 @@ spec:
           value: "true"
         - name: HOME
           value: /tekton/home
+        - name: INTEGRATION_PROFILE
+          value: $(params.integration-profile)
       script: |
         #!/usr/bin/env bash
         set -euo pipefail
 
         status_file="$(results.validation-status.path)"
         fail() { printf 'Failed' > "$status_file"; printf '[ERROR] %s\n' "$1" >&2; exit 1; }
+        [[ "$INTEGRATION_PROFILE" == "default" || "$INTEGRATION_PROFILE" == "kafka" ]] || fail 'integration-profile must be default or kafka'
         [[ -s VERSION ]] || fail 'VERSION is required'
         package_version="$(tr -d '[:space:]' < VERSION)"
         [[ "$package_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$ ]] || fail 'VERSION must be governed SemVer'
