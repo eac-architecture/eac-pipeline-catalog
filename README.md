@@ -17,8 +17,8 @@ EAC.Foundation, a un servicio concreto ni a una solución funcional.
 | Perfil | Recurso | Estado |
 |---|---|---|
 | NuGet CI | `eac-nuget-ci` | Implementado con integración `default` o `kafka` seleccionable |
-| NuGet release candidate | `eac-nuget-release-candidate` | Implementado sin publicación; reservado para verificación aislada y candidato estable |
-| NuGet prerelease publication | `eac-nuget-prerelease-publication` | Implementado con rama `release/*` y tag inmutable |
+| NuGet release candidate | `eac-nuget-release-candidate` | Implementado sin publicación y con la misma integración seleccionable |
+| NuGet prerelease publication | `eac-nuget-prerelease-publication` | Implementado con rama `release/*`, tag inmutable y la misma integración seleccionable |
 | NuGet stable publication | `eac-nuget-stable-publication` | Implementado con `main`, tag estable y confirmación `Listed` |
 
 ## Instalación manual en Tekton
@@ -88,7 +88,8 @@ inmutable que apunta exactamente al commit aprobado:
 ```
 
 Esta es la única `PipelineRun` necesaria para publicar Alpha, Beta o RC: valida,
-compila, prueba, crea el candidato y lo publica. No requiere ejecutar antes
+compila, selecciona las pruebas `default` o `kafka`, crea el candidato y lo
+publica. No requiere ejecutar antes
 `eac-nuget-release-candidate`. Rechaza cualquier commit que no coincida
 simultáneamente con la rama
 `release/*` remota y el tag indicado. Obtiene la credencial exclusivamente del

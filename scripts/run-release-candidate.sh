@@ -4,15 +4,20 @@ set -euo pipefail
 
 repo_url="${1:-}"
 revision="${2:-main}"
+integration_profile="${3:-${INTEGRATION_PROFILE:-default}}"
 namespace="${TEKTON_NAMESPACE:-eac-cicd}"
 context="${KUBE_CONTEXT:-kind-eac-cicd}"
 pipeline="${EAC_RELEASE_PIPELINE:-eac-nuget-release-candidate}"
 service_account="${TEKTON_SERVICE_ACCOUNT:-eac-release}"
 
 if [[ -z "$repo_url" ]]; then
-    printf 'Usage: %s <repository-url> [revision]\n' "$0" >&2
+    printf 'Usage: %s <repository-url> [revision] [default|kafka]\n' "$0" >&2
     exit 2
 fi
+case "$integration_profile" in
+    default|kafka) ;;
+    *) printf '[ERROR] Integration profile must be default or kafka: %s\n' "$integration_profile" >&2; exit 2 ;;
+esac
 
 temp_dir="$(mktemp -d)"
 workspace_template="$temp_dir/workspace.yaml"
@@ -45,6 +50,7 @@ tkn pipeline start "$pipeline" \
     --serviceaccount "$service_account" \
     --param "repo-url=$repo_url" \
     --param "revision=$revision" \
+    --param "integration-profile=$integration_profile" \
     --workspace "name=source,volumeClaimTemplateFile=$workspace_template" \
     --pod-template "$pod_template" \
     --showlog \
