@@ -10,7 +10,7 @@ de producto de EAC Platform y sus soluciones consumidoras.
 | ID | Alcance | Dependencia | Estado | Evidencia |
 |---|---|---|---|---|
 | PC-001 | identidad, estructura y contrato de consumo | ADR transversal | Completado | catálogo `0.1.0` publicado |
-| PC-002 | perfil `packages/nuget` CI | PC-001 | En curso | Tasks .NET nativas reutilizables; lectura Git privada aislada; evento Git pendiente |
+| PC-002 | perfil `packages/nuget` CI | PC-001 | Completado | `v0.4.4` ejecuta Tasks .NET nativas, checkout privado aislado y eventos Pipelines as Code de PR/push; once componentes mantienen bindings mínimos verificados |
 | PC-002K | integración Kafka opcional en los pipelines NuGet reutilizables | PC-002 y consumidor Kafka real | Completado | selector `integration-profile: kafka` compartido por CI, candidato y prerelease; Task reutilizable con sidecar fijado y pruebas contra `KAFKA_BOOTSTRAP_SERVERS` |
 | PC-003A | candidato `packages/nuget` para G5-G7 | PC-002 | Completado | `EAC.Foundation 0.1.0-rc.1`: package, símbolos, SBOM, smoke test y evidencia |
 | PC-003B | publicación prerelease `packages/nuget` para G8 | revisión y tag de `release/*`, confirmación explícita y credencial | Completado | una `PipelineRun` ejecuta compuerta, build, pruebas, candidato y publicación; termina al aceptar el registro la identidad y no requiere candidato previo |
@@ -21,6 +21,11 @@ de producto de EAC Platform y sus soluciones consumidoras.
 | PC-007 | perfil `deployments` | artifacts publicados | Pendiente | promoción sin recompilar |
 | PC-008 | integración con Service Starter | perfiles estables | Pendiente | consumidores generados |
 
+La baseline operativa actual es `v0.4.4`. Los perfiles NuGet compartidos cubren CI,
+candidato, publicación prerelease y preparación estable; `integration-profile`
+selecciona únicamente el entorno adicional requerido por las pruebas sin crear
+Pipelines específicas por componente.
+
 ## 3. Regla de avance
 
 Cada perfil se implementa primero con un consumidor real. No se crean
@@ -29,7 +34,7 @@ actualizan el catálogo, las plantillas, el diseño transversal y la evidencia.
 
 ## 4. Próximo resultado
 
-Ejecutar con EAC.Foundation el cierre estable ya implementado: conservar el
+Cuando exista autorización explícita, ejecutar con EAC.Foundation el cierre estable ya implementado: conservar el
 candidato `0.1.0`, fusionar su árbol exacto desde `release/0.1.0`, crear
 `v0.1.0`, promover sin recompilar el paquete retenido, confirmar `Listed`, crear
 el GitHub Release y sincronizar `main` hacia `develop`. La firma de paquetes se
