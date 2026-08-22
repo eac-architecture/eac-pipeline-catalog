@@ -12,12 +12,12 @@ service_account="${TEKTON_SERVICE_ACCOUNT:-eac-ci}"
 configuration="${BUILD_CONFIGURATION:-Release}"
 
 if [[ -z "$repo_url" ]]; then
-    printf 'Usage: %s <repository-url> [revision] [default|kafka]\n' "$0" >&2
+    printf 'Usage: %s <repository-url> [revision] [default|kafka|postgresql]\n' "$0" >&2
     exit 2
 fi
 case "$integration_profile" in
-    default|kafka) ;;
-    *) printf '[ERROR] Integration profile must be default or kafka: %s\n' "$integration_profile" >&2; exit 2 ;;
+    default|kafka|postgresql) ;;
+    *) printf '[ERROR] Integration profile must be default, kafka or postgresql: %s\n' "$integration_profile" >&2; exit 2 ;;
 esac
 
 temp_dir="$(mktemp -d)"

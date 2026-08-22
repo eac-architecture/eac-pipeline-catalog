@@ -20,7 +20,7 @@ y scripts auxiliares para uso local; Tekton no ejecuta esos scripts.
 | repositorio | `eac-pipeline-catalog` |
 | entregable | catálogo Tekton versionado |
 | versión inicial | `0.1.0` |
-| versión en preparación | `0.4.4` |
+| versión en preparación | `0.4.5` |
 | propietario | EAC Platform |
 | consumidores | plataforma, herramientas, soluciones, servicios y cualquier repositorio compatible |
 | excluido | lógica de negocio, instalación de terceros y secretos |
@@ -221,6 +221,16 @@ excluyente, ejecuta `eac-dotnet-test-kafka`, aprovisiona un sidecar efímero no
 privilegiado y expone `KAFKA_BOOTSTRAP_SERVERS` al proceso de pruebas. El
 repositorio consumidor no define Pipelines, Tasks ni infraestructura Docker
 propia.
+
+### Integración PostgreSQL opcional
+
+Los componentes NuGet que verifican persistencia relacional real seleccionan
+`integration-profile: postgresql` en las mismas Pipelines de CI, candidato y
+publicación prerelease. La ruta, mutuamente excluyente con `default` y `kafka`,
+ejecuta `eac-dotnet-test-postgresql`, aprovisiona PostgreSQL como sidecar efímero
+no privilegiado y entrega `EAC_POSTGRES_CONNECTION_STRING` a las pruebas. El
+componente consumidor acepta esa conexión externa y conserva Testcontainers
+únicamente como alternativa para la ejecución local.
 ## 7. Contrato `nuget-release-candidate`
 
 El repositorio consumidor amplía el contrato de CI con:
