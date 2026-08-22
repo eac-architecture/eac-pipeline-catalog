@@ -5,7 +5,7 @@ metadata:
   labels:
     app.kubernetes.io/name: eac-pipeline-catalog
     app.kubernetes.io/component: dotnet-release-candidate
-    app.kubernetes.io/version: 0.4.3
+    app.kubernetes.io/version: 0.4.4
 spec:
   description: Creates and verifies a NuGet release candidate without publishing it.
   params:
