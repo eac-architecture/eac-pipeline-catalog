@@ -4,15 +4,16 @@ metadata:
   name: eac-nuget-ci
   annotations:
     pipelinesascode.tekton.dev/task: >-
-      [https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.4.4/catalog/shared/tasks/git-checkout/task.yaml,
-      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.4.4/catalog/profiles/packages/nuget/tasks/repository-validate/task.yaml,
-      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.4.4/catalog/profiles/packages/nuget/tasks/dotnet-build/task.yaml,
-      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.4.4/catalog/profiles/packages/nuget/tasks/dotnet-test/task.yaml,
-      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.4.4/catalog/profiles/packages/nuget/tasks/dotnet-test-kafka/task.yaml]
+      [https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.4.5/catalog/shared/tasks/git-checkout/task.yaml,
+      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.4.5/catalog/profiles/packages/nuget/tasks/repository-validate/task.yaml,
+      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.4.5/catalog/profiles/packages/nuget/tasks/dotnet-build/task.yaml,
+      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.4.5/catalog/profiles/packages/nuget/tasks/dotnet-test/task.yaml,
+      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.4.5/catalog/profiles/packages/nuget/tasks/dotnet-test-kafka/task.yaml,
+      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.4.5/catalog/profiles/packages/nuget/tasks/dotnet-test-postgresql/task.yaml]
   labels:
     app.kubernetes.io/name: eac-pipeline-catalog
     app.kubernetes.io/component: nuget-ci
-    app.kubernetes.io/version: 0.4.4
+    app.kubernetes.io/version: 0.4.5
 spec:
   description: Executes the reusable continuous integration contract for a .NET NuGet repository.
   params:
@@ -107,6 +108,23 @@ spec:
       workspaces:
         - name: source
           workspace: source
+    - name: test-postgresql
+      runAfter:
+        - build
+      when:
+        - input: $(params.integration-profile)
+          operator: in
+          values:
+            - postgresql
+      taskRef:
+        kind: Task
+        name: eac-dotnet-test-postgresql
+      params:
+        - name: configuration
+          value: $(params.configuration)
+      workspaces:
+        - name: source
+          workspace: source
   results:
     - name: commit-sha
       description: Immutable commit verified by the pipeline.
@@ -126,3 +144,6 @@ spec:
     - name: kafka-test-status
       description: Automated test status when the Kafka profile is selected.
       value: $(tasks.test-kafka.results.test-status)
+    - name: postgresql-test-status
+      description: Automated test status when the PostgreSQL profile is selected.
+      value: $(tasks.test-postgresql.results.test-status)

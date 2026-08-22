@@ -9,6 +9,7 @@ required_files=(
     "$root_dir/catalog/shared/tasks/git-checkout/task.yaml"
     "$root_dir/catalog/profiles/packages/nuget/pipelines/continuous-integration.yaml"
     "$root_dir/catalog/profiles/packages/nuget/tasks/dotnet-test-kafka/task.yaml"
+    "$root_dir/catalog/profiles/packages/nuget/tasks/dotnet-test-postgresql/task.yaml"
     "$root_dir/catalog/profiles/packages/nuget/pipelines/release-candidate.yaml"
     "$root_dir/catalog/profiles/packages/nuget/pipelines/prerelease-publication.yaml"
     "$root_dir/catalog/profiles/packages/nuget/pipelines/stable-publication.yaml"
@@ -74,6 +75,7 @@ publication_pipeline="$root_dir/catalog/profiles/packages/nuget/pipelines/prerel
 stable_publication_pipeline="$root_dir/catalog/profiles/packages/nuget/pipelines/stable-publication.yaml"
 ci_pipeline="$root_dir/catalog/profiles/packages/nuget/pipelines/continuous-integration.yaml"
 kafka_test_task="$root_dir/catalog/profiles/packages/nuget/tasks/dotnet-test-kafka/task.yaml"
+postgresql_test_task="$root_dir/catalog/profiles/packages/nuget/tasks/dotnet-test-postgresql/task.yaml"
 checkout_task="$root_dir/catalog/shared/tasks/git-checkout/task.yaml"
 repository_validation_task="$root_dir/catalog/profiles/packages/nuget/tasks/repository-validate/task.yaml"
 release_gate_task="$root_dir/catalog/profiles/packages/nuget/tasks/release-revision-gate/task.yaml"
@@ -145,19 +147,29 @@ for runner in \
     }
 done
 for integration_pipeline in "$ci_pipeline" "$release_pipeline" "$publication_pipeline"; do
-    for required in 'name: integration-profile' 'name: test-default' 'name: test-kafka' 'eac-dotnet-test-kafka'; do
+    for required in 'name: integration-profile' 'name: test-default' 'name: test-kafka' 'eac-dotnet-test-kafka' 'name: test-postgresql' 'eac-dotnet-test-postgresql'; do
         grep -qF "$required" "$integration_pipeline" || {
             printf '[ERROR] NuGet Pipeline is missing optional integration routing: %s (%s)\n' \
                 "$required" "${integration_pipeline#"$root_dir"/}" >&2
             exit 1
         }
     done
-    [[ "$(grep -cF 'input: $(params.integration-profile)' "$integration_pipeline")" -eq 2 ]] || {
+    [[ "$(grep -cF 'input: $(params.integration-profile)' "$integration_pipeline")" -eq 3 ]] || {
         printf '[ERROR] NuGet Pipeline must select exactly one test Task from integration-profile: %s\n' \
             "${integration_pipeline#"$root_dir"/}" >&2
         exit 1
     }
 done
+for required in 'postgres:17.6-alpine3.22' 'EAC_POSTGRES_CONNECTION_STRING' 'allowPrivilegeEscalation: false' 'runAsNonRoot: true' 'runAsUser: 70'; do
+    grep -qF "$required" "$postgresql_test_task" || {
+        printf '[ERROR] NuGet PostgreSQL test Task is missing %s\n' "$required" >&2
+        exit 1
+    }
+done
+if grep -qF 'privileged: true' "$postgresql_test_task"; then
+    printf '[ERROR] NuGet PostgreSQL test Task cannot require privileged containers\n' >&2
+    exit 1
+fi
 if [[ -e "$root_dir/catalog/profiles/packages/nuget/pipelines/continuous-integration-kafka.yaml" ]] ||
     [[ -e "$root_dir/templates/pipelines-as-code/packages/nuget/continuous-integration-kafka.yaml.template" ]]; then
     printf '[ERROR] Kafka integration must not create a second NuGet Pipeline\n' >&2
