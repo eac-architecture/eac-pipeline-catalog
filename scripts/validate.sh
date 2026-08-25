@@ -156,9 +156,15 @@ for integration_pipeline in "$ci_pipeline" "$release_pipeline" "$publication_pip
             exit 1
         }
     done
-    [[ "$(grep -cF 'input: $(params.integration-profile)' "$integration_pipeline")" -eq 4 ]] || {
-        printf '[ERROR] NuGet Pipeline must select exactly one test Task from integration-profile: %s\n' \
+    [[ "$(grep -cF 'input: $(tasks.validate.results.integration-profile)' "$integration_pipeline")" -eq 4 ]] || {
+        printf '[ERROR] NuGet Pipeline must select exactly one test Task from the repository-resolved integration-profile: %s\n' \
             "${integration_pipeline#"$root_dir"/}" >&2
+        exit 1
+    }
+done
+for required in 'name: integration-profile' 'repository binding selects' 'results.integration-profile.path'; do
+    grep -qF "$required" "$repository_validation_task" || {
+        printf '[ERROR] Repository validation must resolve integration profile from the binding: %s\n' "$required" >&2
         exit 1
     }
 done
