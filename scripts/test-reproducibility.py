@@ -75,6 +75,8 @@ def create_sbom(path: pathlib.Path, package_dir: pathlib.Path, reverse: bool) ->
                 ],
             }
         )
+    if reverse:
+        files.reverse()
     has_files = sorted((entry["SPDXID"] for entry in files), reverse=reverse)
     document = {
         "files": files,
@@ -141,9 +143,13 @@ def main() -> None:
                 "DOTNET_NOLOGO": "1",
                 "HOME": str(root / "profile"),
                 "NUGET_PACKAGES": str(root / "packages"),
+                "TMPDIR": str(root / "tmp"),
                 "USERPROFILE": str(root / "profile"),
+                "XDG_DATA_HOME": str(root / "profile" / "share"),
             }
         )
+        pathlib.Path(environment["TMPDIR"]).mkdir(parents=True)
+        pathlib.Path(environment["XDG_DATA_HOME"]).mkdir(parents=True)
         nuget_config_dir = pathlib.Path(environment["APPDATA"]) / "NuGet"
         nuget_config_dir.mkdir(parents=True)
         (nuget_config_dir / "NuGet.Config").write_text(

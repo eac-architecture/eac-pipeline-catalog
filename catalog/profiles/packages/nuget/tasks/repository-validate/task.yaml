@@ -5,7 +5,7 @@ metadata:
   labels:
     app.kubernetes.io/name: eac-pipeline-catalog
     app.kubernetes.io/component: repository-validation
-    app.kubernetes.io/version: 0.4.8
+    app.kubernetes.io/version: 0.4.9
 spec:
   description: Validates the declarative contract of a .NET NuGet repository without invoking repository scripts.
   params:
