@@ -10,6 +10,7 @@ required_files=(
     "$root_dir/catalog/profiles/packages/nuget/pipelines/continuous-integration.yaml"
     "$root_dir/catalog/profiles/packages/nuget/tasks/dotnet-test-kafka/task.yaml"
     "$root_dir/catalog/profiles/packages/nuget/tasks/dotnet-test-postgresql/task.yaml"
+    "$root_dir/catalog/profiles/packages/nuget/tasks/dotnet-test-mongodb/task.yaml"
     "$root_dir/catalog/profiles/packages/nuget/pipelines/release-candidate.yaml"
     "$root_dir/catalog/profiles/packages/nuget/pipelines/prerelease-publication.yaml"
     "$root_dir/catalog/profiles/packages/nuget/pipelines/stable-publication.yaml"
@@ -76,6 +77,7 @@ stable_publication_pipeline="$root_dir/catalog/profiles/packages/nuget/pipelines
 ci_pipeline="$root_dir/catalog/profiles/packages/nuget/pipelines/continuous-integration.yaml"
 kafka_test_task="$root_dir/catalog/profiles/packages/nuget/tasks/dotnet-test-kafka/task.yaml"
 postgresql_test_task="$root_dir/catalog/profiles/packages/nuget/tasks/dotnet-test-postgresql/task.yaml"
+mongodb_test_task="$root_dir/catalog/profiles/packages/nuget/tasks/dotnet-test-mongodb/task.yaml"
 checkout_task="$root_dir/catalog/shared/tasks/git-checkout/task.yaml"
 repository_validation_task="$root_dir/catalog/profiles/packages/nuget/tasks/repository-validate/task.yaml"
 release_gate_task="$root_dir/catalog/profiles/packages/nuget/tasks/release-revision-gate/task.yaml"
@@ -147,14 +149,14 @@ for runner in \
     }
 done
 for integration_pipeline in "$ci_pipeline" "$release_pipeline" "$publication_pipeline"; do
-    for required in 'name: integration-profile' 'name: test-default' 'name: test-kafka' 'eac-dotnet-test-kafka' 'name: test-postgresql' 'eac-dotnet-test-postgresql'; do
+    for required in 'name: integration-profile' 'name: test-default' 'name: test-kafka' 'eac-dotnet-test-kafka' 'name: test-postgresql' 'eac-dotnet-test-postgresql' 'name: test-mongodb' 'eac-dotnet-test-mongodb'; do
         grep -qF "$required" "$integration_pipeline" || {
             printf '[ERROR] NuGet Pipeline is missing optional integration routing: %s (%s)\n' \
                 "$required" "${integration_pipeline#"$root_dir"/}" >&2
             exit 1
         }
     done
-    [[ "$(grep -cF 'input: $(params.integration-profile)' "$integration_pipeline")" -eq 3 ]] || {
+    [[ "$(grep -cF 'input: $(params.integration-profile)' "$integration_pipeline")" -eq 4 ]] || {
         printf '[ERROR] NuGet Pipeline must select exactly one test Task from integration-profile: %s\n' \
             "${integration_pipeline#"$root_dir"/}" >&2
         exit 1
@@ -183,6 +185,16 @@ for required in 'confluentinc/cp-kafka:7.7.1' 'KAFKA_BOOTSTRAP_SERVERS' 'allowPr
 done
 if grep -qF 'privileged: true' "$kafka_test_task"; then
     printf '[ERROR] NuGet Kafka test Task cannot require privileged containers\n' >&2
+    exit 1
+fi
+for required in 'mongo:8.0.16' 'EAC_MONGODB_CONNECTION_STRING' 'EAC_MONGODB_TRANSACTIONAL_CONNECTION_STRING' 'allowPrivilegeEscalation: false' 'runAsNonRoot: true' 'runAsUser: 999'; do
+    grep -qF "$required" "$mongodb_test_task" || {
+        printf '[ERROR] NuGet MongoDB test Task is missing %s\n' "$required" >&2
+        exit 1
+    }
+done
+if grep -qF 'privileged: true' "$mongodb_test_task"; then
+    printf '[ERROR] NuGet MongoDB test Task cannot require privileged containers\n' >&2
     exit 1
 fi
 if grep -qF '$(params.version)' "$release_pipeline" ||

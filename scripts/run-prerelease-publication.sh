@@ -13,12 +13,12 @@ pipeline="${EAC_PUBLISH_PIPELINE:-eac-nuget-prerelease-publication}"
 service_account="${TEKTON_SERVICE_ACCOUNT:-eac-release}"
 
 if [[ -z "$repo_url" || -z "$revision" || -z "$authorized_branch" || -z "$release_tag" ]]; then
-    printf 'Usage: %s <repository-url> <immutable-commit> <release-branch> <release-tag> [default|kafka|postgresql]\n' "$0" >&2
+    printf 'Usage: %s <repository-url> <immutable-commit> <release-branch> <release-tag> [default|kafka|postgresql|mongodb]\n' "$0" >&2
     exit 2
 fi
 case "$integration_profile" in
-    default|kafka|postgresql) ;;
-    *) printf '[ERROR] Integration profile must be default, kafka or postgresql: %s\n' "$integration_profile" >&2; exit 2 ;;
+    default|kafka|postgresql|mongodb) ;;
+    *) printf '[ERROR] Integration profile must be default, kafka, postgresql or mongodb: %s\n' "$integration_profile" >&2; exit 2 ;;
 esac
 
 temp_dir="$(mktemp -d)"
