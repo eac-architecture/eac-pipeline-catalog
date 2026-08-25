@@ -20,7 +20,7 @@ y scripts auxiliares para uso local; Tekton no ejecuta esos scripts.
 | repositorio | `eac-pipeline-catalog` |
 | entregable | catálogo Tekton versionado |
 | versión inicial | `0.1.0` |
-| versión en preparación | `0.4.5` |
+| versión en preparación | `0.4.6` |
 | propietario | EAC Platform |
 | consumidores | plataforma, herramientas, soluciones, servicios y cualquier repositorio compatible |
 | excluido | lógica de negocio, instalación de terceros y secretos |
@@ -231,6 +231,16 @@ ejecuta `eac-dotnet-test-postgresql`, aprovisiona PostgreSQL como sidecar efíme
 no privilegiado y entrega `EAC_POSTGRES_CONNECTION_STRING` a las pruebas. El
 componente consumidor acepta esa conexión externa y conserva Testcontainers
 únicamente como alternativa para la ejecución local.
+
+### Integración MongoDB opcional
+
+Los componentes NuGet que certifican persistencia documental seleccionan
+`integration-profile: mongodb`. La Task reutilizable aprovisiona dos sidecars
+no privilegiados de la misma versión fijada: una instancia standalone y un
+replica set de un nodo. Expone `EAC_MONGODB_CONNECTION_STRING` para las reglas
+documentales y `EAC_MONGODB_TRANSACTIONAL_CONNECTION_STRING` para las reglas
+transaccionales. El consumidor conserva Testcontainers solo como alternativa
+local y no incorpora Docker, Pipelines ni Tasks propias.
 ## 7. Contrato `nuget-release-candidate`
 
 El repositorio consumidor amplía el contrato de CI con:

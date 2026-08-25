@@ -1,0 +1,133 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: eac-dotnet-test-mongodb
+  labels:
+    app.kubernetes.io/name: eac-pipeline-catalog
+    app.kubernetes.io/component: dotnet-test-mongodb
+    app.kubernetes.io/version: 0.4.6
+spec:
+  description: Executes .NET tests against ephemeral standalone and replica-set MongoDB instances.
+  params:
+    - name: configuration
+      type: string
+      default: Release
+      description: .NET build configuration.
+  workspaces:
+    - name: source
+      description: Workspace containing the built repository.
+  results:
+    - name: test-status
+      description: Automated test status.
+  stepTemplate:
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+      runAsGroup: 65532
+      runAsNonRoot: true
+      runAsUser: 65532
+  sidecars:
+    - name: mongodb-standalone
+      image: mongo:8.0.16
+      command: [/bin/bash, -c]
+      args:
+        - mkdir -p /tmp/mongodb-standalone && exec mongod --quiet --dbpath /tmp/mongodb-standalone --bind_ip_all --port 27017
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+        runAsGroup: 999
+        runAsNonRoot: true
+        runAsUser: 999
+    - name: mongodb-replica-set
+      image: mongo:8.0.16
+      command: [/bin/bash, -c]
+      args:
+        - mkdir -p /tmp/mongodb-replica-set && exec mongod --quiet --dbpath /tmp/mongodb-replica-set --bind_ip_all --port 27018 --replSet eac-rs
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+        runAsGroup: 999
+        runAsNonRoot: true
+        runAsUser: 999
+  steps:
+    - name: initialize
+      image: mongo:8.0.16
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+        runAsGroup: 999
+        runAsNonRoot: true
+        runAsUser: 999
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        for port in 27017 27018; do
+          ready=false
+          for _ in $(seq 1 60); do
+            if mongosh --quiet --host 127.0.0.1 --port "$port" \
+                --eval 'quit(db.runCommand({ping: 1}).ok ? 0 : 1)' >/dev/null 2>&1; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          [[ "$ready" == "true" ]] || {
+            printf '[ERROR] MongoDB on port %s did not become ready\n' "$port" >&2
+            exit 1
+          }
+        done
+
+        mongosh --quiet --host 127.0.0.1 --port 27018 \
+          --eval 'try { rs.status() } catch (_) { rs.initiate({_id: "eac-rs", members: [{_id: 0, host: "127.0.0.1:27018"}]}) }' >/dev/null
+        primary=false
+        for _ in $(seq 1 60); do
+          if mongosh --quiet --host 127.0.0.1 --port 27018 \
+              --eval 'quit(db.hello().isWritablePrimary ? 0 : 1)' >/dev/null 2>&1; then
+            primary=true
+            break
+          fi
+          sleep 1
+        done
+        [[ "$primary" == "true" ]] || {
+          printf '[ERROR] Ephemeral MongoDB replica set did not elect a primary\n' >&2
+          exit 1
+        }
+    - name: test
+      image: mcr.microsoft.com/dotnet/sdk:10.0.201
+      workingDir: $(workspaces.source.path)/repository
+      env:
+        - name: BUILD_CONFIGURATION
+          value: $(params.configuration)
+        - name: CI
+          value: "true"
+        - name: DOTNET_CLI_HOME
+          value: $(workspaces.source.path)/.home/dotnet
+        - name: EAC_MONGODB_CONNECTION_STRING
+          value: mongodb://127.0.0.1:27017/?directConnection=true
+        - name: EAC_MONGODB_TRANSACTIONAL_CONNECTION_STRING
+          value: mongodb://127.0.0.1:27018/?replicaSet=eac-rs&directConnection=true
+        - name: HOME
+          value: /tekton/home
+        - name: NUGET_PACKAGES
+          value: $(workspaces.source.path)/.nuget/packages
+        - name: TEST_COLOR
+          value: Never
+        - name: TEST_OUTPUT
+          value: Table
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        status_file="$(results.test-status.path)"
+        solution="$(find . -maxdepth 1 -type f \( -name '*.sln' -o -name '*.slnx' \) -print -quit)"
+        dotnet test --solution "$solution" --configuration "$BUILD_CONFIGURATION" --no-build --no-restore --no-ansi --no-progress --output Normal
+        printf 'Succeeded' > "$status_file"

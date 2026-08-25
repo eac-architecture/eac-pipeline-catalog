@@ -5,7 +5,7 @@ metadata:
   labels:
     app.kubernetes.io/name: eac-pipeline-catalog
     app.kubernetes.io/component: nuget-prerelease-publication
-    app.kubernetes.io/version: 0.4.5
+    app.kubernetes.io/version: 0.4.6
 spec:
   description: Revalidates an immutable tag and completes when the registry accepts the NuGet prerelease.
   params:
@@ -122,8 +122,23 @@ spec:
       workspaces:
         - name: source
           workspace: source
+    - name: test-mongodb
+      runAfter: [build]
+      when:
+        - input: $(params.integration-profile)
+          operator: in
+          values: [mongodb]
+      taskRef:
+        kind: Task
+        name: eac-dotnet-test-mongodb
+      params:
+        - name: configuration
+          value: Release
+      workspaces:
+        - name: source
+          workspace: source
     - name: create-candidate
-      runAfter: [test-default, test-kafka, test-postgresql]
+      runAfter: [test-default, test-kafka, test-postgresql, test-mongodb]
       taskRef:
         kind: Task
         name: eac-dotnet-release-candidate
