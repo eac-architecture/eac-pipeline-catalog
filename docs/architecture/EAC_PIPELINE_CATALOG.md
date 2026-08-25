@@ -20,7 +20,7 @@ y scripts auxiliares para uso local; Tekton no ejecuta esos scripts.
 | repositorio | `eac-pipeline-catalog` |
 | entregable | catálogo Tekton versionado |
 | versión inicial | `0.1.0` |
-| versión en preparación | `0.4.6` |
+| versión en preparación | `0.4.7` |
 | propietario | EAC Platform |
 | consumidores | plataforma, herramientas, soluciones, servicios y cualquier repositorio compatible |
 | excluido | lógica de negocio, instalación de terceros y secretos |
@@ -241,6 +241,15 @@ replica set de un nodo. Expone `EAC_MONGODB_CONNECTION_STRING` para las reglas
 documentales y `EAC_MONGODB_TRANSACTIONAL_CONNECTION_STRING` para las reglas
 transaccionales. El consumidor conserva Testcontainers solo como alternativa
 local y no incorpora Docker, Pipelines ni Tasks propias.
+
+Para CI, candidato y publicación prerelease, la Task de validación resuelve el
+perfil efectivo desde el binding versionado
+`.tekton/continuous-integration.yaml` del commit obtenido. El valor enviado por
+el runner se conserva como alternativa para repositorios que todavía no tienen
+binding. Cuando ambos difieren, prevalece el binding remoto y la ejecución deja
+una advertencia explícita. Esto evita que una consola desactualizada degrade por
+accidente un componente `kafka`, `postgresql` o `mongodb` a la ruta `default`.
+
 ## 7. Contrato `nuget-release-candidate`
 
 El repositorio consumidor amplía el contrato de CI con:
