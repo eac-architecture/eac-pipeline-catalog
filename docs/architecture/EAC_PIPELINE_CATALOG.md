@@ -20,7 +20,7 @@ y scripts auxiliares para uso local; Tekton no ejecuta esos scripts.
 | repositorio | `eac-pipeline-catalog` |
 | entregable | catálogo Tekton versionado |
 | versión inicial | `0.1.0` |
-| versión en preparación | `0.4.8` |
+| versión en preparación | `0.4.9` |
 | propietario | EAC Platform |
 | consumidores | plataforma, herramientas, soluciones, servicios y cualquier repositorio compatible |
 | excluido | lógica de negocio, instalación de terceros y secretos |
@@ -297,6 +297,11 @@ cubre. Dos ejecuciones del mismo commit y versión producen bytes idénticos par
 `.nupkg`, `.snupkg` y el manifiesto SPDX. La normalización ocurre antes de una
 eventual firma; una futura firma de paquetes deberá aplicarse después de esta
 etapa.
+
+La aplicación .NET de normalización utiliza `TMPDIR`, `DOTNET_CLI_HOME` y
+`XDG_DATA_HOME` creados dentro del workspace escribible de la Task. El SPDX
+normalizado ordena también el inventario `files`, por lo que el orden no
+determinista de detección no altera su contenido final.
 
 | Parámetro | Uso |
 |---|---|

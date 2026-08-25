@@ -5,7 +5,7 @@ metadata:
   labels:
     app.kubernetes.io/name: eac-pipeline-catalog
     app.kubernetes.io/component: dotnet-test-postgresql
-    app.kubernetes.io/version: 0.4.8
+    app.kubernetes.io/version: 0.4.9
 spec:
   description: Executes .NET tests against an ephemeral non-privileged PostgreSQL database.
   params:

@@ -260,7 +260,7 @@ grep -qF 'subPath: artifacts' "$publication_pipeline" || {
     printf '[ERROR] NuGet publication must isolate artifacts through a workspace subPath\n' >&2
     exit 1
 }
-for required in 'EAC_REPRODUCIBILITY_NORMALIZER_BEGIN' 'DeterministicTimestamp' 'RCoreProperties' 'sourceDateEpoch' 'reproducible":true'; do
+for required in 'EAC_REPRODUCIBILITY_NORMALIZER_BEGIN' 'DeterministicTimestamp' 'RCoreProperties' 'sourceDateEpoch' 'reproducible":true' 'name: TMPDIR' 'name: XDG_DATA_HOME' 'sortedFiles' '"$TMPDIR" "$DOTNET_CLI_HOME" "$XDG_DATA_HOME"'; do
     grep -qF "$required" "$root_dir/catalog/profiles/packages/nuget/tasks/release-candidate/task.yaml" || {
         printf '[ERROR] Release candidate reproducibility contract is missing %s\n' "$required" >&2
         exit 1

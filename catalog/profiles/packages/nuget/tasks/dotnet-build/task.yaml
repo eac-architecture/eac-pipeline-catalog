@@ -5,7 +5,7 @@ metadata:
   labels:
     app.kubernetes.io/name: eac-pipeline-catalog
     app.kubernetes.io/component: dotnet-build
-    app.kubernetes.io/version: 0.4.8
+    app.kubernetes.io/version: 0.4.9
 spec:
   description: Restores, formats and builds the repository solution directly.
   params:
