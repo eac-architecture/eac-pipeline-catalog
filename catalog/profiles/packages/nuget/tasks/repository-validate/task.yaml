@@ -5,7 +5,7 @@ metadata:
   labels:
     app.kubernetes.io/name: eac-pipeline-catalog
     app.kubernetes.io/component: repository-validation
-    app.kubernetes.io/version: 0.4.6
+    app.kubernetes.io/version: 0.4.7
 spec:
   description: Validates the declarative contract of a .NET NuGet repository without invoking repository scripts.
   params:
@@ -21,6 +21,8 @@ spec:
       description: Repository validation status.
     - name: package-version
       description: Prerelease SemVer resolved from the repository VERSION file.
+    - name: integration-profile
+      description: Integration profile resolved from the repository binding or runner fallback.
   stepTemplate:
     securityContext:
       allowPrivilegeEscalation: false
@@ -47,7 +49,33 @@ spec:
 
         status_file="$(results.validation-status.path)"
         fail() { printf 'Failed' > "$status_file"; printf '[ERROR] %s\n' "$1" >&2; exit 1; }
-        [[ "$INTEGRATION_PROFILE" == "default" || "$INTEGRATION_PROFILE" == "kafka" || "$INTEGRATION_PROFILE" == "postgresql" || "$INTEGRATION_PROFILE" == "mongodb" ]] || fail 'integration-profile must be default, kafka, postgresql or mongodb'
+        valid_profile() {
+          [[ "$1" == "default" || "$1" == "kafka" || "$1" == "postgresql" || "$1" == "mongodb" ]]
+        }
+        valid_profile "$INTEGRATION_PROFILE" || fail 'integration-profile must be default, kafka, postgresql or mongodb'
+        binding='.tekton/continuous-integration.yaml'
+        declared_profile=''
+        if [[ -f "$binding" ]]; then
+          declared_profile="$(awk '
+            /^[[:space:]]*- name: integration-profile[[:space:]]*$/ { profile = 1; next }
+            profile && /^[[:space:]]*value:[[:space:]]*/ {
+              sub(/^[[:space:]]*value:[[:space:]]*/, "")
+              gsub(/["'\''[:space:]]/, "")
+              print
+              exit
+            }
+            profile && /^[[:space:]]*- name:/ { profile = 0 }
+          ' "$binding")"
+        fi
+        if [[ -n "$declared_profile" ]]; then
+          valid_profile "$declared_profile" || fail 'repository binding declares an unsupported integration-profile'
+          if [[ "$declared_profile" != "$INTEGRATION_PROFILE" ]]; then
+            printf '[WARN] Runner requested integration-profile=%s; repository binding selects %s\n' "$INTEGRATION_PROFILE" "$declared_profile"
+          fi
+          resolved_profile="$declared_profile"
+        else
+          resolved_profile="$INTEGRATION_PROFILE"
+        fi
         [[ -s VERSION ]] || fail 'VERSION is required'
         package_version="$(tr -d '[:space:]' < VERSION)"
         [[ "$package_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$ ]] || fail 'VERSION must be governed SemVer'
@@ -63,4 +91,6 @@ spec:
         fi
         printf 'Succeeded' > "$status_file"
         printf '%s' "$package_version" > "$(results.package-version.path)"
+        printf '%s' "$resolved_profile" > "$(results.integration-profile.path)"
+        printf '[OK] Integration profile resolved: %s\n' "$resolved_profile"
         printf '[OK] Declarative NuGet repository contract validated\n'

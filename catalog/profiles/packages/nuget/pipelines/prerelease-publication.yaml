@@ -5,7 +5,7 @@ metadata:
   labels:
     app.kubernetes.io/name: eac-pipeline-catalog
     app.kubernetes.io/component: nuget-prerelease-publication
-    app.kubernetes.io/version: 0.4.6
+    app.kubernetes.io/version: 0.4.7
 spec:
   description: Revalidates an immutable tag and completes when the registry accepts the NuGet prerelease.
   params:
@@ -80,7 +80,7 @@ spec:
     - name: test-default
       runAfter: [build]
       when:
-        - input: $(params.integration-profile)
+        - input: $(tasks.validate.results.integration-profile)
           operator: in
           values: [default]
       taskRef:
@@ -95,7 +95,7 @@ spec:
     - name: test-kafka
       runAfter: [build]
       when:
-        - input: $(params.integration-profile)
+        - input: $(tasks.validate.results.integration-profile)
           operator: in
           values: [kafka]
       taskRef:
@@ -110,7 +110,7 @@ spec:
     - name: test-postgresql
       runAfter: [build]
       when:
-        - input: $(params.integration-profile)
+        - input: $(tasks.validate.results.integration-profile)
           operator: in
           values: [postgresql]
       taskRef:
@@ -125,7 +125,7 @@ spec:
     - name: test-mongodb
       runAfter: [build]
       when:
-        - input: $(params.integration-profile)
+        - input: $(tasks.validate.results.integration-profile)
           operator: in
           values: [mongodb]
       taskRef:
