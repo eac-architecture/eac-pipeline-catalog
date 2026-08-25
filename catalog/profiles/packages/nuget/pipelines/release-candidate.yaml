@@ -4,18 +4,18 @@ metadata:
   name: eac-nuget-release-candidate
   annotations:
     pipelinesascode.tekton.dev/task: >-
-      [https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.4.8/catalog/shared/tasks/git-checkout/task.yaml,
-      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.4.8/catalog/profiles/packages/nuget/tasks/repository-validate/task.yaml,
-      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.4.8/catalog/profiles/packages/nuget/tasks/dotnet-build/task.yaml,
-      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.4.8/catalog/profiles/packages/nuget/tasks/dotnet-test/task.yaml,
-      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.4.8/catalog/profiles/packages/nuget/tasks/dotnet-test-kafka/task.yaml,
-      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.4.8/catalog/profiles/packages/nuget/tasks/dotnet-test-postgresql/task.yaml,
-      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.4.8/catalog/profiles/packages/nuget/tasks/dotnet-test-mongodb/task.yaml,
-      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.4.8/catalog/profiles/packages/nuget/tasks/release-candidate/task.yaml]
+      [https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.4.9/catalog/shared/tasks/git-checkout/task.yaml,
+      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.4.9/catalog/profiles/packages/nuget/tasks/repository-validate/task.yaml,
+      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.4.9/catalog/profiles/packages/nuget/tasks/dotnet-build/task.yaml,
+      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.4.9/catalog/profiles/packages/nuget/tasks/dotnet-test/task.yaml,
+      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.4.9/catalog/profiles/packages/nuget/tasks/dotnet-test-kafka/task.yaml,
+      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.4.9/catalog/profiles/packages/nuget/tasks/dotnet-test-postgresql/task.yaml,
+      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.4.9/catalog/profiles/packages/nuget/tasks/dotnet-test-mongodb/task.yaml,
+      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.4.9/catalog/profiles/packages/nuget/tasks/release-candidate/task.yaml]
   labels:
     app.kubernetes.io/name: eac-pipeline-catalog
     app.kubernetes.io/component: nuget-release-candidate
-    app.kubernetes.io/version: 0.4.8
+    app.kubernetes.io/version: 0.4.9
 spec:
   description: Builds, tests, packages and verifies a NuGet candidate without publishing it.
   params:

@@ -5,7 +5,7 @@ metadata:
   labels:
     app.kubernetes.io/name: eac-pipeline-catalog
     app.kubernetes.io/component: dotnet-release-candidate
-    app.kubernetes.io/version: 0.4.8
+    app.kubernetes.io/version: 0.4.9
 spec:
   description: Creates and verifies a NuGet release candidate without publishing it.
   params:
@@ -59,6 +59,10 @@ spec:
           value: $(workspaces.source.path)/.nuget/packages
         - name: ARTIFACTS_DIR
           value: $(workspaces.source.path)/artifacts
+        - name: TMPDIR
+          value: $(workspaces.source.path)/.tmp
+        - name: XDG_DATA_HOME
+          value: $(workspaces.source.path)/.home/share
       script: |
         #!/usr/bin/env bash
         set -euo pipefail
@@ -68,7 +72,7 @@ spec:
         sbom_dir="$artifacts_dir/sbom"
         evidence_dir="$artifacts_dir/evidence"
         rm -rf "$packages_dir" "$sbom_dir" "$evidence_dir"
-        mkdir -p "$packages_dir" "$sbom_dir" "$evidence_dir"
+        mkdir -p "$packages_dir" "$sbom_dir" "$evidence_dir" "$TMPDIR" "$DOTNET_CLI_HOME" "$XDG_DATA_HOME"
         project="$(find src -type f -name '*.csproj' -exec grep -l '<IsPackable>true</IsPackable>' {} + | head -n 1)"
         package_id="$(sed -n 's:.*<PackageId>\([^<]*\)</PackageId>.*:\1:p' "$project" | head -n 1)"
         [[ -n "$package_id" ]] || package_id="$(basename "$project" .csproj)"
@@ -216,6 +220,20 @@ spec:
             var timestamp = DateTimeOffset.FromUnixTimeSeconds(long.Parse(epoch));
             root["documentNamespace"] = $"{namespaceBase.TrimEnd('/')}/{packageId}/{packageVersion}/{commitSha}";
             root["creationInfo"]!["created"] = timestamp.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'");
+
+            if (root["files"] is JsonArray files)
+            {
+                var sortedFiles = files
+                    .Select(value => value!)
+                    .OrderBy(value => value["fileName"]?.GetValue<string>(), StringComparer.Ordinal)
+                    .ThenBy(value => value["SPDXID"]?.GetValue<string>(), StringComparer.Ordinal)
+                    .ToArray();
+                files.Clear();
+                foreach (var file in sortedFiles)
+                {
+                    files.Add(file);
+                }
+            }
 
             foreach (var package in root["packages"]?.AsArray() ?? [])
             {
