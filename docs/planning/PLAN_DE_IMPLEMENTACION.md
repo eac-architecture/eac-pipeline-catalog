@@ -18,13 +18,15 @@ de producto de EAC Platform y sus soluciones consumidoras.
 | PC-003A | candidato `packages/nuget` para G5-G7 | PC-002 | Completado | `EAC.Foundation 0.1.0-rc.1`: package, símbolos, SBOM, smoke test y evidencia |
 | PC-003B | publicación prerelease `packages/nuget` para G8 | revisión y tag de `release/*`, confirmación explícita y credencial | Completado | una `PipelineRun` ejecuta compuerta, build, pruebas, candidato y publicación; termina al aceptar el registro la identidad y no requiere candidato previo |
 | PC-003C | promoción estable `packages/nuget` | PC-003B y merge aprobado a `main` | Implementado; ejecución real pendiente | candidato estable retenido antes del merge; compuerta de árbol, evidencia y hashes; publicación exacta sin recompilar; confirmación `Listed` |
+| PC-003D | reproducibilidad byte a byte del candidato NuGet | PC-003A | Implementado; publicación `v0.4.8` pendiente | normalización de `.nupkg`, `.snupkg` y SPDX desde la fecha del commit; `test-reproducibility.py` verifica dos generaciones con metadatos variables y reporta `EAC-PC-CANDIDATE-001` |
 | PC-004 | perfiles `packages/npm` | contrato npm | Pendiente | package probado y publicado |
 | PC-005 | perfiles `applications/angular` | PC-004 y contrato OCI/web | Pendiente | aplicación web reproducible |
 | PC-006 | perfiles `services/dotnet` | contrato de contenedor | Pendiente | imagen OCI por digest |
 | PC-007 | perfil `deployments` | artifacts publicados | Pendiente | promoción sin recompilar |
 | PC-008 | integración con Service Starter | perfiles estables | Pendiente | consumidores generados |
 
-La baseline operativa actual es `v0.4.7`. Los perfiles NuGet compartidos cubren CI,
+La baseline publicada actual es `v0.4.7`; `v0.4.8` está en preparación para
+incorporar la reproducibilidad del candidato. Los perfiles NuGet compartidos cubren CI,
 candidato, publicación prerelease y preparación estable; `integration-profile`
 selecciona únicamente el entorno adicional requerido por las pruebas sin crear
 Pipelines específicas por componente.

@@ -20,7 +20,7 @@ y scripts auxiliares para uso local; Tekton no ejecuta esos scripts.
 | repositorio | `eac-pipeline-catalog` |
 | entregable | catálogo Tekton versionado |
 | versión inicial | `0.1.0` |
-| versión en preparación | `0.4.7` |
+| versión en preparación | `0.4.8` |
 | propietario | EAC Platform |
 | consumidores | plataforma, herramientas, soluciones, servicios y cualquier repositorio compatible |
 | excluido | lógica de negocio, instalación de terceros y secretos |
@@ -268,9 +268,10 @@ flowchart LR
     VALIDATE --> BUILD[3. Build Release with resolved version]
     BUILD --> TEST[4. Test same binaries]
     TEST --> PACK[5. Pack NuGet and symbols]
-    PACK --> SBOM[6. Generate and validate SPDX SBOM]
-    SBOM --> SMOKE[7. Restore and run clean consumer]
-    SMOKE --> EVIDENCE[8. Hashes and release evidence]
+    PACK --> NORMALIZE[6. Normalize package bytes from commit time]
+    NORMALIZE --> SBOM[7. Generate, normalize and validate SPDX SBOM]
+    SBOM --> SMOKE[8. Restore and run clean consumer]
+    SMOKE --> EVIDENCE[9. Hashes and release evidence]
 ```
 
 ### Orden explicado
@@ -282,10 +283,20 @@ flowchart LR
    proyecto.
 4. Las pruebas utilizan exactamente los binaries compilados en el paso 3.
 5. Se generan un `.nupkg` y un `.snupkg` sin recompilar.
-6. Microsoft SBOM Tool, fijado por el repositorio, genera y valida SPDX 2.2.
-7. Un proyecto temporal restaura el package desde el directorio local y usa
+6. Se normalizan orden, marcas de tiempo y metadatos OPC de ambos ZIP usando
+   la fecha del commit como `SOURCE_DATE_EPOCH` lógico.
+7. Microsoft SBOM Tool, fijado por el repositorio, genera SPDX 2.2; después se
+   normalizan sus campos dinámicos y se valida el resultado.
+8. Un proyecto temporal restaura el package desde el directorio local y usa
    una API pública real del ensamblado.
-8. Se generan SHA-256 y evidencia JSON vinculados al commit y la versión.
+9. Se generan SHA-256 y evidencia JSON vinculados al commit y la versión.
+
+Mientras el catálogo utiliza .NET 10, la normalización posterior a `pack`
+elimina las variaciones de empaquetado que MSBuild determinista todavía no
+cubre. Dos ejecuciones del mismo commit y versión producen bytes idénticos para
+`.nupkg`, `.snupkg` y el manifiesto SPDX. La normalización ocurre antes de una
+eventual firma; una futura firma de paquetes deberá aplicarse después de esta
+etapa.
 
 | Parámetro | Uso |
 |---|---|
@@ -321,7 +332,8 @@ flowchart LR
 5. Se repiten build y pruebas en la ejecución que publicará; no se confía ciegamente en
    una ejecución anterior.
 6. Se regeneran package, símbolos, SBOM, smoke test, hashes y evidencia en el
-   mismo `PipelineRun` que publicará.
+   mismo `PipelineRun` que publicará. La normalización determinista garantiza
+   que el mismo commit y versión reconstruyen exactamente los mismos bytes.
 7. Solo la Task final proyecta la clave `nuget-api-key` del Secret
    `eac-release-publishing`.
 8. `dotnet nuget push` publica en NuGet.org con `--skip-duplicate`; ninguna
@@ -452,18 +464,17 @@ las definiciones Tekton, sus ejecuciones, los PVC efímeros y los registros de
 repositorios de Pipelines as Code. No desinstala los controladores, no elimina
 credenciales y no modifica las Service Accounts de la plataforma.
 
-## 12. Matriz de trazabilidad de reglas planificadas
+## 12. Matriz de trazabilidad de reglas
 
-El catálogo ya ejecuta estos comportamientos, pero los IDs permanecerán en
-`plannedRules` hasta que sus validaciones publiquen metadatos de regla y
-evidencia homogéneos con el resto de EAC.
+Las reglas sin prueba enlazada permanecen en `plannedRules` hasta que sus
+validaciones publiquen metadatos y evidencia homogéneos con el resto de EAC.
 
 | ID | Regla de diseño | Evidencia ejecutable prevista |
 |---|---|---|
 | `EAC-PC-CATALOG-001` | Los repositorios consumen Pipelines versionadas sin copiar su implementación. | Catalog resolution test. |
 | `EAC-PC-VERSION-001` | Toda referencia consumida es inmutable y SemVer. | Reference validation test. |
 | `EAC-PC-CI-001` | CI restaura, compila, prueba y conserva evidencia sin credenciales de publicación. | Tekton CI integration test. |
-| `EAC-PC-CANDIDATE-001` | El candidato conserva versión, SHA, paquete, símbolos, SBOM y hashes verificables. | Release candidate integration test. |
+| `EAC-PC-CANDIDATE-001` | El candidato conserva versión, SHA y bytes reproducibles para paquete, símbolos y SBOM, con hashes verificables. | [`test-reproducibility.py`](../../scripts/test-reproducibility.py) genera dos empaquetados deliberadamente variables y exige identidades byte a byte. |
 | `EAC-PC-PRERELEASE-001` | Un prerelease publica exactamente el candidato aprobado desde `release/*`. | Prerelease publication test. |
 | `EAC-PC-STABLE-001` | Stable promueve el artefacto retenido desde el `main` coincidente sin reconstruir. | Stable promotion test. |
 | `EAC-PC-CRED-001` | Cada credencial se entrega sólo a la Task que la necesita: Git al checkout y a la compuerta remota; publicación al publisher. | Tekton security policy test. |

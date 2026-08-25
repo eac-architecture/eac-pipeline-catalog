@@ -23,6 +23,7 @@ required_files=(
     "$root_dir/scripts/run-release-candidate.sh"
     "$root_dir/scripts/run-prerelease-publication.sh"
     "$root_dir/scripts/run-stable-publication.sh"
+    "$root_dir/scripts/test-reproducibility.py"
     "$root_dir/scripts/clean.sh"
 )
 
@@ -257,6 +258,17 @@ if grep -q -- '--workspace "name=artifacts,' \
 fi
 grep -qF 'subPath: artifacts' "$publication_pipeline" || {
     printf '[ERROR] NuGet publication must isolate artifacts through a workspace subPath\n' >&2
+    exit 1
+}
+for required in 'EAC_REPRODUCIBILITY_NORMALIZER_BEGIN' 'DeterministicTimestamp' 'RCoreProperties' 'sourceDateEpoch' 'reproducible":true'; do
+    grep -qF "$required" "$root_dir/catalog/profiles/packages/nuget/tasks/release-candidate/task.yaml" || {
+        printf '[ERROR] Release candidate reproducibility contract is missing %s\n' "$required" >&2
+        exit 1
+    }
+done
+python "$root_dir/scripts/test-reproducibility.py"
+python "$root_dir/scripts/test-reproducibility.py" --list-rules | grep -qxF 'EAC-PC-CANDIDATE-001' || {
+    printf '[ERROR] Reproducibility test must expose EAC-PC-CANDIDATE-001 metadata\n' >&2
     exit 1
 }
 if grep -qF '$(workspaces.artifacts.path)' \
