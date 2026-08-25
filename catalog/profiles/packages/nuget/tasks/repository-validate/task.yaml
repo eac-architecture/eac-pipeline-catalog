@@ -5,7 +5,7 @@ metadata:
   labels:
     app.kubernetes.io/name: eac-pipeline-catalog
     app.kubernetes.io/component: repository-validation
-    app.kubernetes.io/version: 0.4.5
+    app.kubernetes.io/version: 0.4.6
 spec:
   description: Validates the declarative contract of a .NET NuGet repository without invoking repository scripts.
   params:
@@ -47,7 +47,7 @@ spec:
 
         status_file="$(results.validation-status.path)"
         fail() { printf 'Failed' > "$status_file"; printf '[ERROR] %s\n' "$1" >&2; exit 1; }
-        [[ "$INTEGRATION_PROFILE" == "default" || "$INTEGRATION_PROFILE" == "kafka" || "$INTEGRATION_PROFILE" == "postgresql" ]] || fail 'integration-profile must be default, kafka or postgresql'
+        [[ "$INTEGRATION_PROFILE" == "default" || "$INTEGRATION_PROFILE" == "kafka" || "$INTEGRATION_PROFILE" == "postgresql" || "$INTEGRATION_PROFILE" == "mongodb" ]] || fail 'integration-profile must be default, kafka, postgresql or mongodb'
         [[ -s VERSION ]] || fail 'VERSION is required'
         package_version="$(tr -d '[:space:]' < VERSION)"
         [[ "$package_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$ ]] || fail 'VERSION must be governed SemVer'
