@@ -5,7 +5,7 @@ metadata:
   labels:
     app.kubernetes.io/name: eac-pipeline-catalog
     app.kubernetes.io/component: release-revision-gate
-    app.kubernetes.io/version: 0.4.7
+    app.kubernetes.io/version: 0.4.8
 spec:
   description: Verifies that an authorized branch and immutable publication tag identify the checked-out commit.
   params:
