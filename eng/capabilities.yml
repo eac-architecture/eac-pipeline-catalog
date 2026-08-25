@@ -3,11 +3,12 @@ component:
   id: eac-pipeline-catalog
   artifactFamily: tekton-catalog
 conformance:
+  coveredRules:
+    - EAC-PC-CANDIDATE-001
   plannedRules:
     - EAC-PC-CATALOG-001
     - EAC-PC-VERSION-001
     - EAC-PC-CI-001
-    - EAC-PC-CANDIDATE-001
     - EAC-PC-PRERELEASE-001
     - EAC-PC-STABLE-001
     - EAC-PC-CRED-001

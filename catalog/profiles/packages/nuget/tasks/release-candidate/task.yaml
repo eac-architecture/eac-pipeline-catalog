@@ -5,7 +5,7 @@ metadata:
   labels:
     app.kubernetes.io/name: eac-pipeline-catalog
     app.kubernetes.io/component: dotnet-release-candidate
-    app.kubernetes.io/version: 0.4.7
+    app.kubernetes.io/version: 0.4.8
 spec:
   description: Creates and verifies a NuGet release candidate without publishing it.
   params:
@@ -73,12 +73,184 @@ spec:
         package_id="$(sed -n 's:.*<PackageId>\([^<]*\)</PackageId>.*:\1:p' "$project" | head -n 1)"
         [[ -n "$package_id" ]] || package_id="$(basename "$project" .csproj)"
         [[ "$(git rev-parse HEAD)" == "$RELEASE_COMMIT" ]] || { printf '[ERROR] commit-sha must identify checked-out HEAD\n' >&2; exit 1; }
-        dotnet pack "$project" --configuration "$BUILD_CONFIGURATION" --no-build --no-restore -p:PackageVersion="$PACKAGE_VERSION" -p:PackageOutputPath="$packages_dir"
+        source_date_epoch="$(git show -s --format=%ct "$RELEASE_COMMIT")"
+        dotnet pack "$project" --configuration "$BUILD_CONFIGURATION" --no-build --no-restore -p:PackageVersion="$PACKAGE_VERSION" -p:PackageOutputPath="$packages_dir" -p:Deterministic=true -p:DeterministicTimestamp="$source_date_epoch"
         package_file="$packages_dir/$package_id.$PACKAGE_VERSION.nupkg"
         symbols_file="$packages_dir/$package_id.$PACKAGE_VERSION.snupkg"
         [[ -f "$package_file" && -f "$symbols_file" ]] || { printf '[ERROR] Candidate package inventory is incomplete\n' >&2; exit 1; }
+        normalizer="$(mktemp --suffix=.cs)"
+        # EAC_REPRODUCIBILITY_NORMALIZER_BEGIN
+        cat > "$normalizer" <<'CSHARP'
+        #:property PublishAot=false
+        #:property SelfContained=false
+        using System.IO.Compression;
+        using System.Text;
+        using System.Text.Json;
+        using System.Text.Json.Nodes;
+        using System.Text.Encodings.Web;
+        using System.Xml;
+        using System.Xml.Linq;
+
+        const string CorePropertiesPath = "package/services/metadata/core-properties/coreProperties.psmdcp";
+
+        var modeIndex = Array.FindIndex(args, argument => argument is "package" or "sbom");
+        if (modeIndex < 0)
+        {
+            throw new ArgumentException("A package or sbom normalization mode is required.");
+        }
+        args = args[modeIndex..];
+
+        switch (args[0])
+        {
+            case "package" when args.Length >= 3:
+                var packageTimestamp = DateTimeOffset.FromUnixTimeSeconds(long.Parse(args[1]));
+                foreach (var packagePath in args[2..])
+                {
+                    NormalizePackage(packagePath, packageTimestamp);
+                }
+                break;
+            case "sbom" when args.Length == 7:
+                NormalizeSbom(args[1], args[2], args[3], args[4], args[5], args[6]);
+                break;
+            default:
+                throw new ArgumentException("Unsupported normalization arguments.");
+        }
+
+        static void NormalizePackage(string packagePath, DateTimeOffset timestamp)
+        {
+            var temporaryPath = packagePath + ".reproducible";
+            File.Delete(temporaryPath);
+
+            using (var sourceStream = File.OpenRead(packagePath))
+            using (var source = new ZipArchive(sourceStream, ZipArchiveMode.Read))
+            using (var targetStream = File.Create(temporaryPath))
+            using (var target = new ZipArchive(targetStream, ZipArchiveMode.Create))
+            {
+                var entries = source.Entries
+                    .Select(entry => new
+                    {
+                        Source = entry,
+                        Name = entry.FullName.StartsWith("package/services/metadata/core-properties/", StringComparison.Ordinal)
+                            ? CorePropertiesPath
+                            : entry.FullName
+                    })
+                    .OrderBy(entry => entry.Name, StringComparer.Ordinal)
+                    .ToArray();
+
+                if (entries.Select(entry => entry.Name).Distinct(StringComparer.Ordinal).Count() != entries.Length)
+                {
+                    throw new InvalidDataException($"Package contains duplicate normalized entries: {packagePath}");
+                }
+
+                foreach (var entry in entries)
+                {
+                    using var input = entry.Source.Open();
+                    using var buffer = new MemoryStream();
+                    input.CopyTo(buffer);
+                    var content = entry.Name == "_rels/.rels"
+                        ? NormalizeRelationships(buffer.ToArray())
+                        : buffer.ToArray();
+
+                    var outputEntry = target.CreateEntry(entry.Name, CompressionLevel.Optimal);
+                    outputEntry.LastWriteTime = timestamp;
+                    outputEntry.ExternalAttributes = 0;
+                    using var output = outputEntry.Open();
+                    output.Write(content);
+                }
+            }
+
+            File.Move(temporaryPath, packagePath, true);
+        }
+
+        static byte[] NormalizeRelationships(byte[] content)
+        {
+            using var input = new MemoryStream(content);
+            var document = XDocument.Load(input, LoadOptions.None);
+            var relationships = document.Descendants()
+                .Where(element => element.Name.LocalName == "Relationship")
+                .ToArray();
+            foreach (var relationship in relationships)
+            {
+                var type = (string?)relationship.Attribute("Type") ?? string.Empty;
+                if (type.EndsWith("/metadata/core-properties", StringComparison.Ordinal))
+                {
+                    relationship.SetAttributeValue("Target", "/" + CorePropertiesPath);
+                    relationship.SetAttributeValue("Id", "RCoreProperties");
+                }
+                else if (type.EndsWith("/manifest", StringComparison.Ordinal))
+                {
+                    relationship.SetAttributeValue("Id", "RManifest");
+                }
+            }
+
+            var root = document.Root ?? throw new InvalidDataException("Package relationships document is empty.");
+            root.ReplaceNodes(relationships
+                .OrderBy(element => (string?)element.Attribute("Type"), StringComparer.Ordinal)
+                .ThenBy(element => (string?)element.Attribute("Target"), StringComparer.Ordinal));
+
+            using var output = new MemoryStream();
+            var settings = new XmlWriterSettings
+            {
+                Encoding = new UTF8Encoding(false),
+                Indent = true,
+                NewLineChars = "\n",
+                OmitXmlDeclaration = false
+            };
+            using (var writer = XmlWriter.Create(output, settings))
+            {
+                document.Save(writer);
+            }
+            return output.ToArray();
+        }
+
+        static void NormalizeSbom(
+            string epoch,
+            string packageId,
+            string packageVersion,
+            string commitSha,
+            string namespaceBase,
+            string sbomPath)
+        {
+            var root = JsonNode.Parse(File.ReadAllText(sbomPath, Encoding.UTF8))?.AsObject()
+                ?? throw new InvalidDataException("SBOM document is empty.");
+            var timestamp = DateTimeOffset.FromUnixTimeSeconds(long.Parse(epoch));
+            root["documentNamespace"] = $"{namespaceBase.TrimEnd('/')}/{packageId}/{packageVersion}/{commitSha}";
+            root["creationInfo"]!["created"] = timestamp.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'");
+
+            foreach (var package in root["packages"]?.AsArray() ?? [])
+            {
+                foreach (var reference in package?["externalRefs"]?.AsArray() ?? [])
+                {
+                    var locator = reference?["referenceLocator"]?.GetValue<string>();
+                    if (locator is not null && locator.Contains("?tag_id=", StringComparison.Ordinal))
+                    {
+                        reference!["referenceLocator"] = locator[..locator.IndexOf("?tag_id=", StringComparison.Ordinal)] + "?tag_id=" + commitSha;
+                    }
+                }
+
+                if (package?["hasFiles"] is JsonArray hasFiles)
+                {
+                    var sorted = hasFiles.Select(value => value!.GetValue<string>()).OrderBy(value => value, StringComparer.Ordinal).ToArray();
+                    hasFiles.Clear();
+                    foreach (var value in sorted)
+                    {
+                        hasFiles.Add((JsonNode?)JsonValue.Create(value));
+                    }
+                }
+            }
+
+            var options = new JsonSerializerOptions
+            {
+                Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+                WriteIndented = true
+            };
+            File.WriteAllText(sbomPath, root.ToJsonString(options) + "\n", new UTF8Encoding(false));
+        }
+        CSHARP
+        # EAC_REPRODUCIBILITY_NORMALIZER_END
+        dotnet run --file "$normalizer" package "$source_date_epoch" "$package_file" "$symbols_file"
         smoke_dir="$(mktemp -d)"
-        trap 'rm -rf "$smoke_dir"' EXIT
+        trap 'rm -rf "$smoke_dir" "$normalizer"' EXIT
         cat > "$smoke_dir/Smoke.csproj" <<EOF
         <Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup><ItemGroup><PackageReference Include="$package_id" Version="$PACKAGE_VERSION" /></ItemGroup></Project>
         EOF
@@ -90,13 +262,15 @@ spec:
         dotnet build "$smoke_dir/Smoke.csproj" --configuration Release --no-restore
         dotnet tool restore --configfile NuGet.Config
         dotnet tool run sbom-tool generate -b "$packages_dir" -bc . -pn "$package_id" -pv "$PACKAGE_VERSION" -ps 'Organization: EAC Architecture' -nsb 'https://github.com/eac-architecture/sbom'
+        generated_sbom="$packages_dir/_manifest/spdx_2.2/manifest.spdx.json"
+        dotnet run --file "$normalizer" sbom "$source_date_epoch" "$package_id" "$PACKAGE_VERSION" "$RELEASE_COMMIT" 'https://github.com/eac-architecture/sbom' "$generated_sbom"
         dotnet tool run sbom-tool validate -b "$packages_dir" -o "$evidence_dir/sbom-validation.json" -mi SPDX:2.2
         mkdir -p "$sbom_dir"
         mv "$packages_dir/_manifest/spdx_2.2" "$sbom_dir/"
         rm -rf "$packages_dir/_manifest"
         sbom_file="$artifacts_dir/sbom/spdx_2.2/manifest.spdx.json"
         (cd "$artifacts_dir" && sha256sum "packages/$(basename "$package_file")" "packages/$(basename "$symbols_file")" 'sbom/spdx_2.2/manifest.spdx.json') > "$evidence_dir/checksums.sha256"
-        printf '{"packageId":"%s","version":"%s","commit":"%s","sbom":"SPDX-2.2","smokeTest":"Succeeded"}\n' "$package_id" "$PACKAGE_VERSION" "$RELEASE_COMMIT" > "$evidence_dir/release-evidence.json"
+        printf '{"packageId":"%s","version":"%s","commit":"%s","sourceDateEpoch":%s,"reproducible":true,"sbom":"SPDX-2.2","smokeTest":"Succeeded"}\n' "$package_id" "$PACKAGE_VERSION" "$RELEASE_COMMIT" "$source_date_epoch" > "$evidence_dir/release-evidence.json"
 
         basename "$package_file" | tr -d '\n' > "$(results.package-file.path)"
         sha256sum "$package_file" | awk '{printf $1}' > "$(results.package-sha256.path)"

@@ -65,7 +65,9 @@ simula ni necesita un evento de GitHub.
 
 El comando compila una sola vez en `Release`, ejecuta pruebas, genera
 `.nupkg`, `.snupkg`, SBOM SPDX, hashes y evidencia, y verifica el paquete desde
-un consumidor limpio. No recibe credenciales y no publica el candidato.
+un consumidor limpio. El catálogo normaliza esos tres artefactos con la fecha
+del commit para que dos ejecuciones del mismo commit y versión produzcan bytes
+idénticos. No recibe credenciales y no publica el candidato.
 La versión se obtiene del archivo `VERSION` del commit solicitado; durante la
 estabilización puede ser `alpha.N`, `beta.N` o `rc.N`.
 
