@@ -11,6 +11,7 @@ required_files=(
     "$root_dir/catalog/profiles/packages/nuget/tasks/dotnet-test-kafka/task.yaml"
     "$root_dir/catalog/profiles/packages/nuget/tasks/dotnet-test-postgresql/task.yaml"
     "$root_dir/catalog/profiles/packages/nuget/tasks/dotnet-test-mongodb/task.yaml"
+    "$root_dir/catalog/profiles/packages/nuget/tasks/dotnet-test-elasticsearch/task.yaml"
     "$root_dir/catalog/profiles/packages/nuget/pipelines/release-candidate.yaml"
     "$root_dir/catalog/profiles/packages/nuget/pipelines/prerelease-publication.yaml"
     "$root_dir/catalog/profiles/packages/nuget/pipelines/stable-publication.yaml"
@@ -79,6 +80,7 @@ ci_pipeline="$root_dir/catalog/profiles/packages/nuget/pipelines/continuous-inte
 kafka_test_task="$root_dir/catalog/profiles/packages/nuget/tasks/dotnet-test-kafka/task.yaml"
 postgresql_test_task="$root_dir/catalog/profiles/packages/nuget/tasks/dotnet-test-postgresql/task.yaml"
 mongodb_test_task="$root_dir/catalog/profiles/packages/nuget/tasks/dotnet-test-mongodb/task.yaml"
+elasticsearch_test_task="$root_dir/catalog/profiles/packages/nuget/tasks/dotnet-test-elasticsearch/task.yaml"
 checkout_task="$root_dir/catalog/shared/tasks/git-checkout/task.yaml"
 repository_validation_task="$root_dir/catalog/profiles/packages/nuget/tasks/repository-validate/task.yaml"
 release_gate_task="$root_dir/catalog/profiles/packages/nuget/tasks/release-revision-gate/task.yaml"
@@ -150,14 +152,14 @@ for runner in \
     }
 done
 for integration_pipeline in "$ci_pipeline" "$release_pipeline" "$publication_pipeline"; do
-    for required in 'name: integration-profile' 'name: test-default' 'name: test-kafka' 'eac-dotnet-test-kafka' 'name: test-postgresql' 'eac-dotnet-test-postgresql' 'name: test-mongodb' 'eac-dotnet-test-mongodb'; do
+    for required in 'name: integration-profile' 'name: test-default' 'name: test-kafka' 'eac-dotnet-test-kafka' 'name: test-postgresql' 'eac-dotnet-test-postgresql' 'name: test-mongodb' 'eac-dotnet-test-mongodb' 'name: test-elasticsearch' 'eac-dotnet-test-elasticsearch'; do
         grep -qF "$required" "$integration_pipeline" || {
             printf '[ERROR] NuGet Pipeline is missing optional integration routing: %s (%s)\n' \
                 "$required" "${integration_pipeline#"$root_dir"/}" >&2
             exit 1
         }
     done
-    [[ "$(grep -cF 'input: $(tasks.validate.results.integration-profile)' "$integration_pipeline")" -eq 4 ]] || {
+    [[ "$(grep -cF 'input: $(tasks.validate.results.integration-profile)' "$integration_pipeline")" -eq 5 ]] || {
         printf '[ERROR] NuGet Pipeline must select exactly one test Task from the repository-resolved integration-profile: %s\n' \
             "${integration_pipeline#"$root_dir"/}" >&2
         exit 1
@@ -202,6 +204,21 @@ for required in 'mongo:8.0.16' 'EAC_MONGODB_CONNECTION_STRING' 'EAC_MONGODB_TRAN
 done
 if grep -qF 'privileged: true' "$mongodb_test_task"; then
     printf '[ERROR] NuGet MongoDB test Task cannot require privileged containers\n' >&2
+    exit 1
+fi
+for required in 'docker.elastic.co/elasticsearch/elasticsearch:9.3.4' 'EAC_ELASTICSEARCH_ENDPOINT' 'allowPrivilegeEscalation: false' 'runAsNonRoot: true' 'runAsUser: 1000'; do
+    grep -qF "$required" "$elasticsearch_test_task" || {
+        printf '[ERROR] NuGet Elasticsearch test Task is missing %s\n' "$required" >&2
+        exit 1
+    }
+done
+if grep -qF 'privileged: true' "$elasticsearch_test_task"; then
+    printf '[ERROR] NuGet Elasticsearch test Task cannot require privileged containers\n' >&2
+    exit 1
+fi
+if [[ -e "$root_dir/catalog/profiles/packages/nuget/pipelines/continuous-integration-elasticsearch.yaml" ]] ||
+    [[ -e "$root_dir/templates/pipelines-as-code/packages/nuget/continuous-integration-elasticsearch.yaml.template" ]]; then
+    printf '[ERROR] Elasticsearch integration must not create a second NuGet Pipeline\n' >&2
     exit 1
 fi
 if grep -qF '$(params.version)' "$release_pipeline" ||
@@ -271,6 +288,13 @@ python "$root_dir/scripts/test-reproducibility.py" --list-rules | grep -qxF 'EAC
     printf '[ERROR] Reproducibility test must expose EAC-PC-CANDIDATE-001 metadata\n' >&2
     exit 1
 }
+python "$root_dir/scripts/test-catalog-contracts.py"
+for rule_id in EAC-PC-CATALOG-001 EAC-PC-VERSION-001 EAC-PC-CI-001 EAC-PC-PRERELEASE-001 EAC-PC-STABLE-001 EAC-PC-CRED-001 EAC-PC-VALIDATE-001; do
+    python "$root_dir/scripts/test-catalog-contracts.py" --list-rules | grep -qxF "$rule_id" || {
+        printf '[ERROR] Catalog contract test must expose %s metadata\n' "$rule_id" >&2
+        exit 1
+    }
+done
 if grep -qF '$(workspaces.artifacts.path)' \
     "$root_dir/catalog/profiles/packages/nuget/tasks/release-candidate/task.yaml"; then
     printf '[ERROR] Release candidate must write artifacts inside the source workspace\n' >&2

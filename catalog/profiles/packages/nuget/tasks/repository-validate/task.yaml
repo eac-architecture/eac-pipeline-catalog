@@ -5,7 +5,7 @@ metadata:
   labels:
     app.kubernetes.io/name: eac-pipeline-catalog
     app.kubernetes.io/component: repository-validation
-    app.kubernetes.io/version: 0.4.9
+    app.kubernetes.io/version: 0.4.10
 spec:
   description: Validates the declarative contract of a .NET NuGet repository without invoking repository scripts.
   params:
@@ -50,9 +50,9 @@ spec:
         status_file="$(results.validation-status.path)"
         fail() { printf 'Failed' > "$status_file"; printf '[ERROR] %s\n' "$1" >&2; exit 1; }
         valid_profile() {
-          [[ "$1" == "default" || "$1" == "kafka" || "$1" == "postgresql" || "$1" == "mongodb" ]]
+          [[ "$1" == "default" || "$1" == "kafka" || "$1" == "postgresql" || "$1" == "mongodb" || "$1" == "elasticsearch" ]]
         }
-        valid_profile "$INTEGRATION_PROFILE" || fail 'integration-profile must be default, kafka, postgresql or mongodb'
+        valid_profile "$INTEGRATION_PROFILE" || fail 'integration-profile must be default, kafka, postgresql, mongodb or elasticsearch'
         binding='.tekton/continuous-integration.yaml'
         declared_profile=''
         if [[ -f "$binding" ]]; then

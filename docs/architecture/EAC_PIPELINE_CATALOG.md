@@ -20,7 +20,7 @@ y scripts auxiliares para uso local; Tekton no ejecuta esos scripts.
 | repositorio | `eac-pipeline-catalog` |
 | entregable | catálogo Tekton versionado |
 | versión inicial | `0.1.0` |
-| versión en preparación | `0.4.9` |
+| versión en preparación | `0.4.10` |
 | propietario | EAC Platform |
 | consumidores | plataforma, herramientas, soluciones, servicios y cualquier repositorio compatible |
 | excluido | lógica de negocio, instalación de terceros y secretos |
@@ -242,13 +242,23 @@ documentales y `EAC_MONGODB_TRANSACTIONAL_CONNECTION_STRING` para las reglas
 transaccionales. El consumidor conserva Testcontainers solo como alternativa
 local y no incorpora Docker, Pipelines ni Tasks propias.
 
+### Integración Elasticsearch opcional
+
+Los adaptadores NuGet de búsqueda seleccionan `integration-profile:
+elasticsearch` en las mismas Pipelines de CI, candidato y publicación
+prerelease. La Task reutilizable inicia Elasticsearch 9.3.4 como sidecar
+efímero no privilegiado y expone `EAC_ELASTICSEARCH_ENDPOINT` al proceso de
+pruebas. El consumidor usa ese endpoint externo y conserva Testcontainers
+solamente como alternativa local; no define Tasks, Pipelines ni recursos del
+proveedor dentro de su repositorio.
+
 Para CI, candidato y publicación prerelease, la Task de validación resuelve el
 perfil efectivo desde el binding versionado
 `.tekton/continuous-integration.yaml` del commit obtenido. El valor enviado por
 el runner se conserva como alternativa para repositorios que todavía no tienen
 binding. Cuando ambos difieren, prevalece el binding remoto y la ejecución deja
 una advertencia explícita. Esto evita que una consola desactualizada degrade por
-accidente un componente `kafka`, `postgresql` o `mongodb` a la ruta `default`.
+accidente un componente `kafka`, `postgresql`, `mongodb` o `elasticsearch` a la ruta `default`.
 
 ## 7. Contrato `nuget-release-candidate`
 
@@ -471,19 +481,21 @@ credenciales y no modifica las Service Accounts de la plataforma.
 
 ## 12. Matriz de trazabilidad de reglas
 
-Las reglas sin prueba enlazada permanecen en `plannedRules` hasta que sus
-validaciones publiquen metadatos y evidencia homogéneos con el resto de EAC.
+Las reglas implementadas se declaran en `coveredRules` y se validan desde
+`scripts/validate.sh`. Las pruebas de contrato inspeccionan los manifiestos y
+scripts realmente distribuidos; no simulan una segunda implementación del
+catálogo.
 
-| ID | Regla de diseño | Evidencia ejecutable prevista |
+| ID | Regla de diseño | Evidencia ejecutable primaria |
 |---|---|---|
-| `EAC-PC-CATALOG-001` | Los repositorios consumen Pipelines versionadas sin copiar su implementación. | Catalog resolution test. |
-| `EAC-PC-VERSION-001` | Toda referencia consumida es inmutable y SemVer. | Reference validation test. |
-| `EAC-PC-CI-001` | CI restaura, compila, prueba y conserva evidencia sin credenciales de publicación. | Tekton CI integration test. |
+| `EAC-PC-CATALOG-001` | Los repositorios consumen Pipelines versionadas sin copiar su implementación. | [`test-catalog-contracts.py`](../../scripts/test-catalog-contracts.py) · `test_consumer_template_resolves_the_versioned_catalog_pipeline`. |
+| `EAC-PC-VERSION-001` | Toda referencia consumida es inmutable y SemVer. | [`test-catalog-contracts.py`](../../scripts/test-catalog-contracts.py) · `test_catalog_resources_and_remote_references_use_the_stable_catalog_version`. |
+| `EAC-PC-CI-001` | CI restaura, compila, prueba y conserva evidencia sin credenciales de publicación. | [`test-catalog-contracts.py`](../../scripts/test-catalog-contracts.py) · `test_ci_runs_validation_build_and_one_selected_test_without_publication`. |
 | `EAC-PC-CANDIDATE-001` | El candidato conserva versión, SHA y bytes reproducibles para paquete, símbolos y SBOM, con hashes verificables. | [`test-reproducibility.py`](../../scripts/test-reproducibility.py) genera dos empaquetados deliberadamente variables y exige identidades byte a byte. |
-| `EAC-PC-PRERELEASE-001` | Un prerelease publica exactamente el candidato aprobado desde `release/*`. | Prerelease publication test. |
-| `EAC-PC-STABLE-001` | Stable promueve el artefacto retenido desde el `main` coincidente sin reconstruir. | Stable promotion test. |
-| `EAC-PC-CRED-001` | Cada credencial se entrega sólo a la Task que la necesita: Git al checkout y a la compuerta remota; publicación al publisher. | Tekton security policy test. |
-| `EAC-PC-VALIDATE-001` | Scripts y recursos Tekton se validan antes de distribuir el catálogo. | Catalog validation test. |
+| `EAC-PC-PRERELEASE-001` | Un prerelease publica exactamente el candidato aprobado desde `release/*`. | [`test-catalog-contracts.py`](../../scripts/test-catalog-contracts.py) · `test_prerelease_requires_release_revision_and_immutable_tag`. |
+| `EAC-PC-STABLE-001` | Stable promueve el artefacto retenido desde el `main` coincidente sin reconstruir. | [`test-catalog-contracts.py`](../../scripts/test-catalog-contracts.py) · `test_stable_promotes_retained_candidate_without_rebuilding`. |
+| `EAC-PC-CRED-001` | Cada credencial se entrega sólo a la Task que la necesita: Git al checkout y a la compuerta remota; publicación al publisher. | [`test-catalog-contracts.py`](../../scripts/test-catalog-contracts.py) · `test_credentials_are_isolated_to_checkout_release_gate_and_publisher`. |
+| `EAC-PC-VALIDATE-001` | Scripts y recursos Tekton se validan antes de distribuir el catálogo. | [`test-catalog-contracts.py`](../../scripts/test-catalog-contracts.py) · `test_validation_gate_checks_scripts_catalog_and_reproducibility_contract`. |
 
 ## 13. Seguridad
 
