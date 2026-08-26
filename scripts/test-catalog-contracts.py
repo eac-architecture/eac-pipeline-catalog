@@ -37,11 +37,23 @@ class PipelineCatalogContractTests(unittest.TestCase):
     @rule("EAC-PC-CI-001")
     def test_ci_runs_validation_build_and_one_selected_test_without_publication(self) -> None:
         pipeline = (ROOT / "catalog/profiles/packages/nuget/pipelines/continuous-integration.yaml").read_text(encoding="utf-8")
-        for task in ("name: validate", "name: build", "name: test-default", "name: test-kafka", "name: test-postgresql", "name: test-mongodb"):
+        for task in ("name: validate", "name: build", "name: test-default", "name: test-kafka", "name: test-postgresql", "name: test-mongodb", "name: test-elasticsearch"):
             self.assertIn(task, pipeline)
         self.assertNotIn("eac-nuget-publish", pipeline)
         self.assertIn("name: commit-sha", pipeline)
         self.assertIn("name: test-status", pipeline)
+
+    @rule("EAC-PC-ELASTICSEARCH-001")
+    def test_elasticsearch_profile_reuses_the_nuget_pipelines_with_a_safe_real_node(self) -> None:
+        task = (ROOT / "catalog/profiles/packages/nuget/tasks/dotnet-test-elasticsearch/task.yaml").read_text(encoding="utf-8")
+        self.assertIn("docker.elastic.co/elasticsearch/elasticsearch:9.3.4", task)
+        self.assertIn("EAC_ELASTICSEARCH_ENDPOINT", task)
+        self.assertIn("allowPrivilegeEscalation: false", task)
+        self.assertIn("runAsNonRoot: true", task)
+        for pipeline_name in ("continuous-integration.yaml", "release-candidate.yaml", "prerelease-publication.yaml"):
+            pipeline = (ROOT / "catalog/profiles/packages/nuget/pipelines" / pipeline_name).read_text(encoding="utf-8")
+            self.assertIn("name: test-elasticsearch", pipeline)
+            self.assertIn("eac-dotnet-test-elasticsearch", pipeline)
 
     @rule("EAC-PC-PRERELEASE-001")
     def test_prerelease_requires_release_revision_and_immutable_tag(self) -> None:

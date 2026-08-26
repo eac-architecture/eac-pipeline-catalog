@@ -5,7 +5,7 @@ metadata:
   labels:
     app.kubernetes.io/name: eac-pipeline-catalog
     app.kubernetes.io/component: nuget-prerelease-publication
-    app.kubernetes.io/version: 0.4.9
+    app.kubernetes.io/version: 0.4.10
 spec:
   description: Revalidates an immutable tag and completes when the registry accepts the NuGet prerelease.
   params:
@@ -137,8 +137,23 @@ spec:
       workspaces:
         - name: source
           workspace: source
+    - name: test-elasticsearch
+      runAfter: [build]
+      when:
+        - input: $(tasks.validate.results.integration-profile)
+          operator: in
+          values: [elasticsearch]
+      taskRef:
+        kind: Task
+        name: eac-dotnet-test-elasticsearch
+      params:
+        - name: configuration
+          value: Release
+      workspaces:
+        - name: source
+          workspace: source
     - name: create-candidate
-      runAfter: [test-default, test-kafka, test-postgresql, test-mongodb]
+      runAfter: [test-default, test-kafka, test-postgresql, test-mongodb, test-elasticsearch]
       taskRef:
         kind: Task
         name: eac-dotnet-release-candidate
