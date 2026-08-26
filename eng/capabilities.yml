@@ -5,7 +5,6 @@ component:
 conformance:
   coveredRules:
     - EAC-PC-CANDIDATE-001
-  plannedRules:
     - EAC-PC-CATALOG-001
     - EAC-PC-VERSION-001
     - EAC-PC-CI-001
