@@ -271,6 +271,13 @@ python "$root_dir/scripts/test-reproducibility.py" --list-rules | grep -qxF 'EAC
     printf '[ERROR] Reproducibility test must expose EAC-PC-CANDIDATE-001 metadata\n' >&2
     exit 1
 }
+python "$root_dir/scripts/test-catalog-contracts.py"
+for rule_id in EAC-PC-CATALOG-001 EAC-PC-VERSION-001 EAC-PC-CI-001 EAC-PC-PRERELEASE-001 EAC-PC-STABLE-001 EAC-PC-CRED-001 EAC-PC-VALIDATE-001; do
+    python "$root_dir/scripts/test-catalog-contracts.py" --list-rules | grep -qxF "$rule_id" || {
+        printf '[ERROR] Catalog contract test must expose %s metadata\n' "$rule_id" >&2
+        exit 1
+    }
+done
 if grep -qF '$(workspaces.artifacts.path)' \
     "$root_dir/catalog/profiles/packages/nuget/tasks/release-candidate/task.yaml"; then
     printf '[ERROR] Release candidate must write artifacts inside the source workspace\n' >&2
