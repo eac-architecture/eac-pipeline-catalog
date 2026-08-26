@@ -1,13 +1,13 @@
 apiVersion: tekton.dev/v1
 kind: Task
 metadata:
-  name: eac-dotnet-test-postgresql
+  name: eac-dotnet-test-elasticsearch
   labels:
     app.kubernetes.io/name: eac-pipeline-catalog
-    app.kubernetes.io/component: dotnet-test-postgresql
+    app.kubernetes.io/component: dotnet-test-elasticsearch
     app.kubernetes.io/version: 0.4.10
 spec:
-  description: Executes .NET tests against an ephemeral non-privileged PostgreSQL database.
+  description: Executes .NET tests against an ephemeral non-privileged Elasticsearch node.
   params:
     - name: configuration
       type: string
@@ -29,25 +29,23 @@ spec:
       runAsNonRoot: true
       runAsUser: 65532
   sidecars:
-    - name: postgresql
-      image: postgres:17.6-alpine3.22
+    - name: elasticsearch
+      image: docker.elastic.co/elasticsearch/elasticsearch:9.3.4
       securityContext:
         allowPrivilegeEscalation: false
         capabilities:
           drop:
             - ALL
-        runAsGroup: 70
+        runAsGroup: 1000
         runAsNonRoot: true
-        runAsUser: 70
+        runAsUser: 1000
       env:
-        - name: POSTGRES_DB
-          value: eac_test
-        - name: POSTGRES_USER
-          value: eac
-        - name: POSTGRES_PASSWORD
-          value: eac-test-password
-        - name: PGDATA
-          value: /tmp/postgresql/data
+        - name: discovery.type
+          value: single-node
+        - name: xpack.security.enabled
+          value: "false"
+        - name: ES_JAVA_OPTS
+          value: -Xms512m -Xmx512m
   steps:
     - name: test
       image: mcr.microsoft.com/dotnet/sdk:10.0.201
@@ -59,8 +57,8 @@ spec:
           value: "true"
         - name: DOTNET_CLI_HOME
           value: $(workspaces.source.path)/.home/dotnet
-        - name: EAC_POSTGRES_CONNECTION_STRING
-          value: Host=127.0.0.1;Port=5432;Database=eac_test;Username=eac;Password=eac-test-password
+        - name: EAC_ELASTICSEARCH_ENDPOINT
+          value: http://127.0.0.1:9200
         - name: HOME
           value: /tekton/home
         - name: NUGET_PACKAGES
@@ -75,8 +73,8 @@ spec:
 
         status_file="$(results.test-status.path)"
         ready=false
-        for _ in $(seq 1 60); do
-          if (echo > /dev/tcp/127.0.0.1/5432) >/dev/null 2>&1; then
+        for _ in $(seq 1 120); do
+          if (echo > /dev/tcp/127.0.0.1/9200) >/dev/null 2>&1; then
             ready=true
             break
           fi
@@ -84,7 +82,7 @@ spec:
         done
         [[ "$ready" == "true" ]] || {
           printf 'Failed' > "$status_file"
-          printf '[ERROR] Ephemeral PostgreSQL database did not become ready\n' >&2
+          printf '[ERROR] Ephemeral Elasticsearch node did not become ready\n' >&2
           exit 1
         }
 
