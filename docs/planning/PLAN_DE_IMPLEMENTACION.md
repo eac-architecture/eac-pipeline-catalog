@@ -10,7 +10,7 @@ de producto de EAC Platform y sus soluciones consumidoras.
 | ID | Alcance | Dependencia | Estado | Evidencia |
 |---|---|---|---|---|
 | PC-001 | identidad, estructura y contrato de consumo | ADR transversal | Completado | catálogo `0.1.0` publicado |
-| PC-002 | perfil `packages/nuget` CI | PC-001 | Completado | `v0.4.7` ejecuta Tasks .NET nativas, checkout privado aislado y eventos Pipelines as Code de PR/push; once componentes mantienen bindings mínimos verificados |
+| PC-002 | perfil `packages/nuget` CI | PC-001 | Completado | `v0.4.10` ejecuta Tasks .NET nativas, checkout privado aislado, eventos Pipelines as Code de PR/push y los perfiles opcionales `kafka`, `postgresql`, `mongodb` y `elasticsearch`; los consumidores mantienen bindings mínimos verificados |
 | PC-002K | integración Kafka opcional en los pipelines NuGet reutilizables | PC-002 y consumidor Kafka real | Completado | selector `integration-profile: kafka` compartido por CI, candidato y prerelease; Task reutilizable con sidecar fijado y pruebas contra `KAFKA_BOOTSTRAP_SERVERS` |
 | PC-002P | integración PostgreSQL opcional en los pipelines NuGet reutilizables | PC-002 y consumidor EF Core real | Completado | selector `integration-profile: postgresql` compartido por CI, candidato y prerelease; PipelineRun `eac-infrastructure-persistence-efcore-ci-zdppk` completó build sin warnings y 18/18 pruebas sobre PostgreSQL 17.6 mediante el sidecar no privilegiado |
 | PC-002M | integración MongoDB opcional en los pipelines NuGet reutilizables | PC-002 y consumidor MongoDB real | Completado | selector `integration-profile: mongodb` compartido por CI, candidato y prerelease; `eac-nuget-ci-run-w8xzt` completó 37/37 pruebas sobre standalone y replica set efímeros no privilegiados |
