@@ -36,7 +36,7 @@ Los repositorios privados se obtienen mediante un Secret Git montado únicamente
 en las Tasks de checkout y verificación remota de la revisión de release. Las
 Tasks no reciben tokens como parámetros ni distinguen
 repositorios públicos y privados; el volumen es opcional para conservar el
-checkout anónimo. En local, `local-environment` crea el Secret desde la sesión
+checkout anónimo. En local, `eac-local-environment` crea el Secret desde la sesión
 segura de GitHub CLI. La configuración temporal se escribe en `/tekton/home`,
 fuera del workspace retenido, y no alcanza a validación de producto, build,
 pruebas ni publicación del paquete.
