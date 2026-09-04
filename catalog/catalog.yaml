@@ -4,6 +4,10 @@ metadata:
   name: eac-pipeline-catalog
 spec:
   version: 0.5.0
+  release:
+    status: unreleased
+    remoteReference: __CATALOG_RELEASE_VERSION__
+    lastPublishedVersion: 0.4.10
   profiles:
     - name: nuget-ci
       family: packages
@@ -37,13 +41,13 @@ spec:
       path: catalog/profiles/packages/npm/pipelines/continuous-integration.yaml
       publicationResource: eac-npm-publication
       publicationPath: catalog/profiles/packages/npm/pipelines/publication.yaml
-      status: implemented
+      status: implemented-unreleased
     - name: angular-web
       family: applications
       technology: angular
       resource: eac-angular-ci
       path: catalog/profiles/applications/angular/pipelines/continuous-integration.yaml
-      status: implemented
+      status: implemented-unreleased
     - name: dotnet-service
       family: services
       technology: dotnet
@@ -51,13 +55,13 @@ spec:
       path: catalog/profiles/services/dotnet/pipelines/continuous-integration.yaml
       publicationResource: eac-dotnet-service-publication
       publicationPath: catalog/profiles/services/dotnet/pipelines/publication.yaml
-      status: implemented
+      status: implemented-unreleased
     - name: deployment
       family: deployments
       resource: eac-deployment-promotion
       path: catalog/profiles/deployments/pipelines/promotion.yaml
-      status: implemented
+      status: implemented-unreleased
   bindings:
     - name: service-starter
       path: templates/service-starter/bindings.yaml
-      status: implemented
+      status: implemented-unreleased

@@ -73,9 +73,17 @@ while IFS= read -r resource; do
         exit 1
     }
 done < <(find "$root_dir/catalog" -type f \( -name 'task.yaml' -o -path '*/pipelines/*.yaml' \))
-if grep -R -nE 'eac-pipeline-catalog/v[0-9]+\.[0-9]+\.[0-9]+/' \
-    "$root_dir/catalog/profiles" | grep -vF "eac-pipeline-catalog/v$catalog_version/"; then
-    printf '[ERROR] Pipeline task references must match VERSION %s\n' "$catalog_version" >&2
+grep -qF 'status: unreleased' "$root_dir/catalog/catalog.yaml" || {
+    printf '[ERROR] The planned catalog version must remain explicitly unreleased until its tag exists\n' >&2
+    exit 1
+}
+grep -qF 'remoteReference: __CATALOG_RELEASE_VERSION__' "$root_dir/catalog/catalog.yaml" || {
+    printf '[ERROR] An unreleased catalog must expose the mechanical release placeholder\n' >&2
+    exit 1
+}
+if grep -R -nF "eac-pipeline-catalog/v$catalog_version/" \
+    "$root_dir/catalog" "$root_dir/templates"; then
+    printf '[ERROR] Unreleased catalog content must not claim the nonexistent v%s remote tag\n' "$catalog_version" >&2
     exit 1
 fi
 grep -qF 'label tasks,pipelines' "$root_dir/scripts/install.sh" || {
@@ -299,7 +307,7 @@ python "$root_dir/scripts/test-reproducibility.py" --list-rules | grep -qxF 'EAC
     exit 1
 }
 python "$root_dir/scripts/test-catalog-contracts.py"
-for rule_id in EAC-PC-CATALOG-001 EAC-PC-VERSION-001 EAC-PC-CI-001 EAC-PC-ELASTICSEARCH-001 EAC-PC-PRERELEASE-001 EAC-PC-STABLE-001 EAC-PC-CRED-001 EAC-PC-VALIDATE-001 EAC-PC-NPM-001 EAC-PC-ANGULAR-001 EAC-PC-OCI-001 EAC-PC-DEPLOY-001 EAC-PC-STARTER-001; do
+for rule_id in EAC-PC-CATALOG-001 EAC-PC-VERSION-001 EAC-PC-CI-001 EAC-PC-ELASTICSEARCH-001 EAC-PC-PRERELEASE-001 EAC-PC-STABLE-001 EAC-PC-CRED-001 EAC-PC-VALIDATE-001 EAC-PC-NPM-001 EAC-PC-ANGULAR-001 EAC-PC-OCI-001 EAC-PC-DEPLOY-001 EAC-PC-STARTER-001 EAC-PC-IMAGE-001; do
     python "$root_dir/scripts/test-catalog-contracts.py" --list-rules | grep -qxF "$rule_id" || {
         printf '[ERROR] Catalog contract test must expose %s metadata\n' "$rule_id" >&2
         exit 1

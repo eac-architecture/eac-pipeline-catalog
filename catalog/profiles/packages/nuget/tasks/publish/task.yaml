@@ -37,7 +37,7 @@ spec:
       runAsUser: 65532
   steps:
     - name: publish
-      image: mcr.microsoft.com/dotnet/sdk:10.0.201
+      image: mcr.microsoft.com/dotnet/sdk:10.0.201@sha256:127d7d4d601ae26b8e04c54efb37e9ce8766931bded0ee59fcd799afd21d6850
       env:
         - name: NUGET_API_KEY
           valueFrom:
@@ -85,7 +85,7 @@ spec:
         - input: $(params.wait-for-listing)
           operator: in
           values: ["true"]
-      image: python:3.11.9-alpine3.20
+      image: python:3.11.9-alpine3.20@sha256:f9ce6fe33d9a5499e35c976df16d24ae80f6ef0a28be5433140236c2ca482686
       env:
         - name: PACKAGE_FILE
           value: $(params.package-file)

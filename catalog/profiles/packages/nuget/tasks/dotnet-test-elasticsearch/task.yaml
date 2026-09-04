@@ -30,7 +30,7 @@ spec:
       runAsUser: 65532
   sidecars:
     - name: elasticsearch
-      image: docker.elastic.co/elasticsearch/elasticsearch:9.3.4
+      image: docker.elastic.co/elasticsearch/elasticsearch:9.3.4@sha256:5111553c2a04b2a1782c7881248c6b6cceabbcf34758e778ee387f5843745e58
       securityContext:
         allowPrivilegeEscalation: false
         capabilities:
@@ -48,7 +48,7 @@ spec:
           value: -Xms512m -Xmx512m
   steps:
     - name: test
-      image: mcr.microsoft.com/dotnet/sdk:10.0.201
+      image: mcr.microsoft.com/dotnet/sdk:10.0.201@sha256:127d7d4d601ae26b8e04c54efb37e9ce8766931bded0ee59fcd799afd21d6850
       workingDir: $(workspaces.source.path)/repository
       env:
         - name: BUILD_CONFIGURATION

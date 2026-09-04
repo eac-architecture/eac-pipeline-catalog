@@ -22,11 +22,11 @@ de producto de EAC Platform y sus soluciones consumidoras.
 | PC-003D | reproducibilidad byte a byte del candidato NuGet | PC-003A | Completado en `0.4.9` | `eac-nuget-release-candidate-run-8vs64` y `eac-nuget-release-candidate-run-6vtsr` reconstruyeron el commit `d1afcb26c12841d905a7fa671ec113676c78075c`; `.nupkg`, `.snupkg` y SPDX resultaron idénticos byte a byte; `test-reproducibility.py` reporta `EAC-PC-CANDIDATE-001` |
 | PC-003E | directorios de ejecución escribibles para la normalización en Tekton | PC-003D y ejecución real | Completado en `0.4.9` | `TMPDIR`, `DOTNET_CLI_HOME` y `XDG_DATA_HOME` se crean dentro del workspace; el inventario SPDX `files` se ordena antes de persistir la evidencia |
 | PC-003F | trazabilidad ejecutable del perfil NuGet implementado | PC-002 a PC-003E | Completado | `test-catalog-contracts.py` enlaza las reglas de catálogo, versión, CI, prerelease, stable, credenciales y validación con los manifiestos y scripts distribuidos; `validate.sh` rechaza metadatos ausentes |
-| PC-004 | perfiles `packages/npm` | contrato npm | Implementado en `0.5.0`; ejecución integrada pendiente | Tasks de verify/pack y publicación exacta, Pipeline CI/publicación y `EAC-PC-NPM-001`; falta consumidor npm real y publicación autorizada |
-| PC-005 | perfiles `applications/angular` | PC-004 y contrato web | Implementado en `0.5.0`; ejecución integrada pendiente | doble build Production normalizado y `EAC-PC-ANGULAR-001`; falta consumidor Angular real |
-| PC-006 | perfiles `services/dotnet` | contrato de contenedor | Implementado en `0.5.0`; ejecución integrada pendiente | .NET SDK genera un archive retenido, Skopeo publica el mismo artifact y devuelve digest; `EAC-PC-OCI-001`; falta consumidor de servicio real y GHCR autorizado |
-| PC-007 | perfil `deployments` | artifacts publicados | Implementado en `0.5.0`; ejecución integrada pendiente | promoción OpenShift exige `@sha256`, no recompila, espera rollout/smoke y cubre `EAC-PC-DEPLOY-001`; falta target y digest publicados |
-| PC-008 | integración con Service Starter | perfiles estables | Contrato del catálogo implementado en `0.5.0`; generación externa pendiente | binding y PipelineRun templates cubiertos por `EAC-PC-STARTER-001`; los generation tests pertenecen a `eac-service-starter` |
+| PC-004 | perfiles `packages/npm` | contrato npm | Implementación local endurecida; release y ejecución integrada pendientes | SHA-256 transportado y revalidado justo antes de publicar, lifecycle scripts desactivados y prueba de mutación negativa; falta consumidor npm real, tag `v0.5.0` y publicación autorizada |
+| PC-005 | perfiles `applications/angular` | PC-004 y contrato web | Implementación local endurecida; release y ejecución integrada pendientes | doble build Production normalizado, imagen fijada por digest y `EAC-PC-ANGULAR-001`; falta consumidor Angular real y tag `v0.5.0` |
+| PC-006 | perfiles `services/dotnet` | contrato de contenedor | Implementación local endurecida; release y ejecución integrada pendientes | .NET SDK genera un archive retenido cuyo SHA-256 se revalida antes del login; Skopeo publica el mismo artifact y devuelve digest; falta consumidor real, GHCR autorizado y tag `v0.5.0` |
+| PC-007 | perfil `deployments` | artifacts publicados | Implementación local endurecida; release y ejecución integrada pendientes | endpoint, namespace, CA, allowlists y smoke son configuración confiable; sólo se promueven digest y workload autorizados, sin aplicar manifiestos no confiables ni interpolar parámetros en shell; falta target real y tag `v0.5.0` |
+| PC-008 | integración con Service Starter | perfiles estables | Contrato local preparado; release y generación externa pendientes | binding y PipelineRun templates conservan `__CATALOG_RELEASE_VERSION__` hasta existir el tag; los generation tests y la sustitución pertenecen a `eac-service-starter` |
 
 La línea `0.4.9` corrige el directorio temporal de la normalización observado
 en la primera ejecución real de `0.4.8` y conserva evidencia byte a byte de dos
@@ -39,12 +39,15 @@ La línea `0.4.10` añade únicamente la ruta opcional Elasticsearch al mismo
 perfil NuGet. No crea una Pipeline por proveedor ni modifica bindings ajenos;
 su cierre requiere una PipelineRun integrada del consumidor real.
 
-La línea `0.5.0` incorpora los contratos ejecutables de npm, Angular,
-servicios .NET OCI y promoción por digest. La validación local demuestra la
-estructura, seguridad, inmutabilidad y enlace de cada perfil. El plan conserva
-por separado la evidencia integrada que requiere repositorios consumidores,
-credenciales de publicación o un destino OpenShift; no equipara una prueba de
-contrato con una publicación o promoción real.
+La línea `0.5.0` está en preparación e incorpora localmente los contratos de
+npm, Angular, servicios .NET OCI y promoción por digest. El tag `v0.5.0` no
+existe: las URLs y bindings conservan `__CATALOG_RELEASE_VERSION__` para impedir
+que una implementación no publicada parezca consumible. La validación local
+demuestra la estructura, el aislamiento de parámetros y credenciales, la
+revalidación de SHA-256 y el pinning por digest de todas las imágenes ejecutadas
+por Tasks. El plan conserva por separado la evidencia integrada que requiere consumidores,
+credenciales o un destino OpenShift; no equipara una prueba de contrato con
+una publicación o promoción real.
 
 ## 3. Regla de avance
 

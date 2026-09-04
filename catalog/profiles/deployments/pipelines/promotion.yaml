@@ -4,8 +4,8 @@ metadata:
   name: eac-deployment-promotion
   annotations:
     pipelinesascode.tekton.dev/task: >-
-      [https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.5.0/catalog/shared/tasks/git-checkout/task.yaml,
-      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.5.0/catalog/profiles/deployments/tasks/promote-by-digest/task.yaml]
+      [https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v__CATALOG_RELEASE_VERSION__/catalog/shared/tasks/git-checkout/task.yaml,
+      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v__CATALOG_RELEASE_VERSION__/catalog/profiles/deployments/tasks/promote-by-digest/task.yaml]
   labels:
     app.kubernetes.io/name: eac-pipeline-catalog
     app.kubernetes.io/component: deployment-promotion
@@ -14,13 +14,9 @@ spec:
   params:
     - {name: repo-url, type: string}
     - {name: revision, type: string}
-    - {name: target-api, type: string}
-    - {name: target-namespace, type: string}
-    - {name: manifest-path, type: string, default: deploy}
     - {name: workload, type: string}
     - {name: container, type: string}
     - {name: image-reference, type: string}
-    - {name: smoke-url, type: string, default: ""}
   workspaces:
     - {name: source}
   tasks:
@@ -35,15 +31,9 @@ spec:
       runAfter: [checkout]
       taskRef: {kind: Task, name: eac-deployment-promote-by-digest}
       params:
-        - {name: target-api, value: $(params.target-api)}
-        - {name: target-namespace, value: $(params.target-namespace)}
-        - {name: manifest-path, value: $(params.manifest-path)}
         - {name: workload, value: $(params.workload)}
         - {name: container, value: $(params.container)}
         - {name: image-reference, value: $(params.image-reference)}
-        - {name: smoke-url, value: $(params.smoke-url)}
-      workspaces:
-        - {name: source, workspace: source}
   results:
     - {name: commit-sha, value: $(tasks.checkout.results.commit-sha)}
     - {name: artifact-uri, value: $(tasks.promote.results.deployed-image)}

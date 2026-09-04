@@ -4,19 +4,19 @@ set -euo pipefail
 
 repo_url="${1:-}"
 revision="${2:-}"
-target_api="${3:-}"
-target_namespace="${4:-}"
-workload="${5:-}"
-container="${6:-}"
-image_reference="${7:-}"
+workload="${3:-}"
+container="${4:-}"
+image_reference="${5:-}"
 namespace="${TEKTON_NAMESPACE:-eac-cicd}"
 context="${KUBE_CONTEXT:-kind-eac-cicd}"
 
-if [[ -z "$image_reference" ]]; then
-    printf 'Usage: %s <repository-url> <revision> <target-api> <target-namespace> <workload> <container> <image@sha256:digest>\n' "$0" >&2
+if [[ -z "$repo_url" || -z "$revision" || -z "$workload" || -z "$container" || -z "$image_reference" ]]; then
+    printf 'Usage: %s <repository-url> <revision> <workload> <container> <image@sha256:digest>\n' "$0" >&2
     exit 2
 fi
-[[ "$image_reference" =~ @sha256:[0-9a-f]{64}$ ]] || { printf '[ERROR] deployment requires an immutable image digest\n' >&2; exit 2; }
+[[ "$workload" =~ ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$ && ${#workload} -le 253 ]] || { printf '[ERROR] workload must be a Kubernetes DNS subdomain\n' >&2; exit 2; }
+[[ "$container" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ && ${#container} -le 63 ]] || { printf '[ERROR] container must be a Kubernetes DNS label\n' >&2; exit 2; }
+[[ "$image_reference" =~ ^[a-z0-9.-]+(/[a-z0-9._-]+)+@sha256:[0-9a-f]{64}$ ]] || { printf '[ERROR] deployment requires a fully qualified immutable image digest\n' >&2; exit 2; }
 
 temp_dir="$(mktemp -d)"
 trap 'rm -rf "$temp_dir"' EXIT
@@ -25,7 +25,6 @@ printf 'spec:\n  accessModes: [ReadWriteOnce]\n  resources:\n    requests:\n    
 tkn pipeline start eac-deployment-promotion \
     --context "$context" --namespace "$namespace" --serviceaccount eac-deployment \
     --param "repo-url=$repo_url" --param "revision=$revision" \
-    --param "target-api=$target_api" --param "target-namespace=$target_namespace" \
     --param "workload=$workload" --param "container=$container" \
     --param "image-reference=$image_reference" \
     --workspace "name=source,volumeClaimTemplateFile=$temp_dir/workspace.yaml" \

@@ -30,7 +30,7 @@ spec:
       runAsUser: 65532
   sidecars:
     - name: kafka
-      image: confluentinc/cp-kafka:7.7.1
+      image: confluentinc/cp-kafka:7.7.1@sha256:653f49c51cfebcf8301938d01044efead6afbd8dd60acd2bcf1605d7c6494d3b
       securityContext:
         allowPrivilegeEscalation: false
         capabilities:
@@ -66,7 +66,7 @@ spec:
           value: "0"
   steps:
     - name: test
-      image: mcr.microsoft.com/dotnet/sdk:10.0.201
+      image: mcr.microsoft.com/dotnet/sdk:10.0.201@sha256:127d7d4d601ae26b8e04c54efb37e9ce8766931bded0ee59fcd799afd21d6850
       workingDir: $(workspaces.source.path)/repository
       env:
         - name: BUILD_CONFIGURATION

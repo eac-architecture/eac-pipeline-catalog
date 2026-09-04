@@ -5,7 +5,7 @@ metadata:
   annotations:
     pipelinesascode.tekton.dev/on-event: "[pull_request, push]"
     pipelinesascode.tekton.dev/on-target-branch: "[develop]"
-    pipelinesascode.tekton.dev/pipeline: https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.5.0/catalog/profiles/services/dotnet/pipelines/continuous-integration.yaml
+    pipelinesascode.tekton.dev/pipeline: https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v__CATALOG_RELEASE_VERSION__/catalog/profiles/services/dotnet/pipelines/continuous-integration.yaml
 spec:
   pipelineRef: {name: eac-dotnet-service-ci}
   params:

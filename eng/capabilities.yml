@@ -18,6 +18,7 @@ conformance:
     - EAC-PC-OCI-001
     - EAC-PC-DEPLOY-001
     - EAC-PC-STARTER-001
+    - EAC-PC-IMAGE-001
 runtimeCapabilities:
   security:
     status: NotApplicable

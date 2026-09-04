@@ -4,8 +4,8 @@ metadata:
   name: eac-npm-ci
   annotations:
     pipelinesascode.tekton.dev/task: >-
-      [https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.5.0/catalog/shared/tasks/git-checkout/task.yaml,
-      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.5.0/catalog/profiles/packages/npm/tasks/verify-and-pack/task.yaml]
+      [https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v__CATALOG_RELEASE_VERSION__/catalog/shared/tasks/git-checkout/task.yaml,
+      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v__CATALOG_RELEASE_VERSION__/catalog/profiles/packages/npm/tasks/verify-and-pack/task.yaml]
   labels:
     app.kubernetes.io/name: eac-pipeline-catalog
     app.kubernetes.io/component: npm-ci
