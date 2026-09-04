@@ -12,3 +12,21 @@ conformance:
     - EAC-PC-STABLE-001
     - EAC-PC-CRED-001
     - EAC-PC-VALIDATE-001
+    - EAC-PC-ELASTICSEARCH-001
+    - EAC-PC-NPM-001
+    - EAC-PC-ANGULAR-001
+    - EAC-PC-OCI-001
+    - EAC-PC-DEPLOY-001
+    - EAC-PC-STARTER-001
+    - EAC-PC-IMAGE-001
+runtimeCapabilities:
+  security:
+    status: NotApplicable
+    reason: The catalog defines build-time supply-chain controls but has no application runtime security boundary.
+    owner: eac-pipeline-catalog
+    evidence: docs/architecture/EAC_PIPELINE_CATALOG.md#14-seguridad
+  observability:
+    status: NotApplicable
+    reason: Tekton records execution evidence; the catalog itself does not run as an observable application service.
+    owner: eac-pipeline-catalog
+    evidence: docs/architecture/EAC_PIPELINE_CATALOG.md#14-seguridad

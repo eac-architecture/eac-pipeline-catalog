@@ -1,0 +1,67 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: eac-dotnet-service-publish-image
+  labels:
+    app.kubernetes.io/name: eac-pipeline-catalog
+    app.kubernetes.io/component: dotnet-service-publish-image
+    app.kubernetes.io/version: 0.5.0
+spec:
+  description: Publishes the exact retained .NET SDK container archive to GHCR and returns its immutable manifest digest.
+  params:
+    - {name: image-repository, type: string, description: Repository below ghcr.io/eac-architecture.}
+    - {name: image-archive, type: string}
+    - {name: archive-digest, type: string}
+    - {name: product-version, type: string}
+  workspaces:
+    - {name: source}
+  results:
+    - {name: artifact-uri}
+    - {name: artifact-digest}
+    - {name: publication-status}
+  steps:
+    - name: publish
+      image: quay.io/skopeo/stable:v1.18.0@sha256:c4c8a9d6fc95e331fa92fc31de3f6c9b5fe4761c82f0acb99669eef067fb7c33
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: [ALL]
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+      env:
+        - {name: EAC_IMAGE_REPOSITORY, value: $(params.image-repository)}
+        - {name: EAC_IMAGE_ARCHIVE, value: $(params.image-archive)}
+        - {name: EAC_ARCHIVE_DIGEST, value: $(params.archive-digest)}
+        - {name: EAC_PRODUCT_VERSION, value: $(params.product-version)}
+        - name: REGISTRY_USERNAME
+          valueFrom:
+            secretKeyRef: {name: eac-release-publishing, key: ghcr-username}
+        - name: REGISTRY_TOKEN
+          valueFrom:
+            secretKeyRef: {name: eac-release-publishing, key: ghcr-token}
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+        umask 077
+        repository="$EAC_IMAGE_REPOSITORY"
+        [[ "$repository" =~ ^[a-z0-9]+([._-][a-z0-9]+)*$ ]] || { printf '[ERROR] Invalid image repository\n' >&2; exit 1; }
+        version="$EAC_PRODUCT_VERSION"
+        [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$ ]] || { printf '[ERROR] Invalid product version\n' >&2; exit 1; }
+        [[ "$EAC_IMAGE_ARCHIVE" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]*\.tar\.gz$ ]] || { printf '[ERROR] Invalid retained image archive filename\n' >&2; exit 1; }
+        [[ "$EAC_ARCHIVE_DIGEST" =~ ^[0-9a-f]{64}$ ]] || { printf '[ERROR] Invalid expected archive SHA-256\n' >&2; exit 1; }
+        archive="$(workspaces.source.path)/artifacts/oci/$EAC_IMAGE_ARCHIVE"
+        [[ -s "$archive" ]] || { printf '[ERROR] Retained container archive is missing\n' >&2; exit 1; }
+        actual_digest="$(sha256sum -- "$archive" | awk '{print $1}')"
+        [[ "$actual_digest" == "$EAC_ARCHIVE_DIGEST" ]] || { printf '[ERROR] Retained container archive SHA-256 changed before publication\n' >&2; exit 1; }
+        auth_file=/tmp/eac-registry-auth.json
+        trap 'rm -f "$auth_file"' EXIT
+        printf '%s' "$REGISTRY_TOKEN" | skopeo login --authfile "$auth_file" --username "$REGISTRY_USERNAME" --password-stdin ghcr.io
+        digest_file=/tmp/image-digest
+        skopeo copy --authfile "$auth_file" --digestfile "$digest_file" \
+          "docker-archive:$archive" "docker://ghcr.io/eac-architecture/$repository:$version"
+        digest="$(tr -d '[:space:]' < "$digest_file")"
+        [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { printf '[ERROR] Registry did not report an immutable manifest digest\n' >&2; exit 1; }
+        printf 'ghcr.io/eac-architecture/%s@%s' "$repository" "$digest" > "$(results.artifact-uri.path)"
+        printf '%s' "$digest" > "$(results.artifact-digest.path)"
+        printf 'published' > "$(results.publication-status.path)"

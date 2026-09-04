@@ -17,6 +17,13 @@ required_files=(
     "$root_dir/catalog/profiles/packages/nuget/pipelines/stable-publication.yaml"
     "$root_dir/catalog/profiles/packages/nuget/tasks/stable-candidate-gate/task.yaml"
     "$root_dir/templates/pipelines-as-code/packages/nuget/continuous-integration.yaml.template"
+    "$root_dir/catalog/profiles/packages/npm/pipelines/continuous-integration.yaml"
+    "$root_dir/catalog/profiles/packages/npm/pipelines/publication.yaml"
+    "$root_dir/catalog/profiles/applications/angular/pipelines/continuous-integration.yaml"
+    "$root_dir/catalog/profiles/services/dotnet/pipelines/continuous-integration.yaml"
+    "$root_dir/catalog/profiles/services/dotnet/pipelines/publication.yaml"
+    "$root_dir/catalog/profiles/deployments/pipelines/promotion.yaml"
+    "$root_dir/templates/service-starter/bindings.yaml"
     "$root_dir/docs/architecture/EAC_PIPELINE_CATALOG.md"
     "$root_dir/docs/planning/PLAN_DE_IMPLEMENTACION.md"
     "$root_dir/scripts/install.sh"
@@ -24,6 +31,9 @@ required_files=(
     "$root_dir/scripts/run-release-candidate.sh"
     "$root_dir/scripts/run-prerelease-publication.sh"
     "$root_dir/scripts/run-stable-publication.sh"
+    "$root_dir/scripts/run-product-ci.sh"
+    "$root_dir/scripts/run-publication.sh"
+    "$root_dir/scripts/run-deployment.sh"
     "$root_dir/scripts/test-reproducibility.py"
     "$root_dir/scripts/clean.sh"
 )
@@ -63,9 +73,17 @@ while IFS= read -r resource; do
         exit 1
     }
 done < <(find "$root_dir/catalog" -type f \( -name 'task.yaml' -o -path '*/pipelines/*.yaml' \))
-if grep -R -nE 'eac-pipeline-catalog/v[0-9]+\.[0-9]+\.[0-9]+/' \
-    "$root_dir/catalog/profiles" | grep -vF "eac-pipeline-catalog/v$catalog_version/"; then
-    printf '[ERROR] Pipeline task references must match VERSION %s\n' "$catalog_version" >&2
+grep -qF 'status: unreleased' "$root_dir/catalog/catalog.yaml" || {
+    printf '[ERROR] The planned catalog version must remain explicitly unreleased until its tag exists\n' >&2
+    exit 1
+}
+grep -qF 'remoteReference: __CATALOG_RELEASE_VERSION__' "$root_dir/catalog/catalog.yaml" || {
+    printf '[ERROR] An unreleased catalog must expose the mechanical release placeholder\n' >&2
+    exit 1
+}
+if grep -R -nF "eac-pipeline-catalog/v$catalog_version/" \
+    "$root_dir/catalog" "$root_dir/templates"; then
+    printf '[ERROR] Unreleased catalog content must not claim the nonexistent v%s remote tag\n' "$catalog_version" >&2
     exit 1
 fi
 grep -qF 'label tasks,pipelines' "$root_dir/scripts/install.sh" || {
@@ -289,12 +307,33 @@ python "$root_dir/scripts/test-reproducibility.py" --list-rules | grep -qxF 'EAC
     exit 1
 }
 python "$root_dir/scripts/test-catalog-contracts.py"
-for rule_id in EAC-PC-CATALOG-001 EAC-PC-VERSION-001 EAC-PC-CI-001 EAC-PC-PRERELEASE-001 EAC-PC-STABLE-001 EAC-PC-CRED-001 EAC-PC-VALIDATE-001; do
+for rule_id in EAC-PC-CATALOG-001 EAC-PC-VERSION-001 EAC-PC-CI-001 EAC-PC-ELASTICSEARCH-001 EAC-PC-PRERELEASE-001 EAC-PC-STABLE-001 EAC-PC-CRED-001 EAC-PC-VALIDATE-001 EAC-PC-NPM-001 EAC-PC-ANGULAR-001 EAC-PC-OCI-001 EAC-PC-DEPLOY-001 EAC-PC-STARTER-001 EAC-PC-IMAGE-001; do
     python "$root_dir/scripts/test-catalog-contracts.py" --list-rules | grep -qxF "$rule_id" || {
         printf '[ERROR] Catalog contract test must expose %s metadata\n' "$rule_id" >&2
         exit 1
     }
 done
+python - "$root_dir" <<'PY'
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+capabilities = (root / "eng/capabilities.yml").read_text(encoding="utf-8")
+design = (root / "docs/architecture/EAC_PIPELINE_CATALOG.md").read_text(encoding="utf-8")
+covered = []
+in_covered = False
+for line in capabilities.splitlines():
+    if line.strip() == "coveredRules:":
+        in_covered = True
+        continue
+    if in_covered and line.startswith("    - "):
+        covered.append(line.removeprefix("    - ").strip())
+    elif in_covered and line.strip() and not line.startswith("    "):
+        break
+for rule_id in covered:
+    if design.count(f"`{rule_id}`") != 1:
+        raise SystemExit(f"[ERROR] Covered rule must occur exactly once in the design matrix: {rule_id}")
+PY
 if grep -qF '$(workspaces.artifacts.path)' \
     "$root_dir/catalog/profiles/packages/nuget/tasks/release-candidate/task.yaml"; then
     printf '[ERROR] Release candidate must write artifacts inside the source workspace\n' >&2

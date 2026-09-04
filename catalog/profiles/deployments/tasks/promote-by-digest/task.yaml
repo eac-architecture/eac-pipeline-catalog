@@ -1,0 +1,114 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: eac-deployment-promote-by-digest
+  labels:
+    app.kubernetes.io/name: eac-pipeline-catalog
+    app.kubernetes.io/component: deployment-promote-by-digest
+    app.kubernetes.io/version: 0.5.0
+spec:
+  description: Promotes an existing OCI image by digest to one trusted existing OpenShift workload without rebuilding it.
+  params:
+    - {name: workload, type: string}
+    - {name: container, type: string}
+    - {name: image-reference, type: string}
+  results:
+    - {name: deployed-image}
+    - {name: deployment-status}
+  volumes:
+    - name: target-credentials
+      secret:
+        secretName: eac-deployment-target
+    - name: target-policy
+      configMap:
+        name: eac-deployment-policy
+  steps:
+    - name: deploy
+      image: quay.io/openshift/origin-cli:4.18@sha256:4c1b64a79727e392c11cf337936f9edb792e436075d4bdad5f554b79652d16dd
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: [ALL]
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+      volumeMounts:
+        - {name: target-credentials, mountPath: /var/run/eac/deployment, readOnly: true}
+        - {name: target-policy, mountPath: /etc/eac/deployment-policy, readOnly: true}
+      env:
+        - {name: HOME, value: /tmp/eac-home}
+        - {name: EAC_WORKLOAD, value: $(params.workload)}
+        - {name: EAC_CONTAINER, value: $(params.container)}
+        - {name: EAC_IMAGE_REFERENCE, value: $(params.image-reference)}
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+        fail() { printf '[ERROR] %s\n' "$1" >&2; exit 1; }
+        read_trusted_value() {
+          local path="$1" value
+          [[ -f "$path" ]] || fail "Missing trusted deployment configuration: $path"
+          value="$(cat -- "$path")"
+          [[ -n "$value" ]] || fail "Empty trusted deployment configuration: $path"
+          [[ "$value" != *$'\r'* && "$value" != *$'\n'* ]] || fail "Trusted deployment configuration must contain exactly one value: $path"
+          printf '%s' "$value"
+        }
+
+        target_api="$(read_trusted_value /etc/eac/deployment-policy/api-url)"
+        target_namespace="$(read_trusted_value /etc/eac/deployment-policy/namespace)"
+        allowlist=/etc/eac/deployment-policy/allowed-image-repositories
+        workload_allowlist=/etc/eac/deployment-policy/allowed-workloads
+        [[ "$target_api" =~ ^https://[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?(:[0-9]{1,5})?$ ]] || fail 'Trusted API URL must be an HTTPS origin without a path'
+        [[ "$target_namespace" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ && ${#target_namespace} -le 63 ]] || fail 'Trusted namespace must be a Kubernetes DNS label'
+        [[ -s /var/run/eac/deployment/token && -s /var/run/eac/deployment/ca.crt ]] || fail 'Deployment token and CA are required'
+        [[ -s "$allowlist" ]] || fail 'Trusted image repository allowlist is required'
+        [[ -s "$workload_allowlist" ]] || fail 'Trusted workload allowlist is required'
+
+        image="$EAC_IMAGE_REFERENCE"
+        [[ "$image" =~ ^[a-z0-9.-]+(/[a-z0-9._-]+)+@sha256:[0-9a-f]{64}$ ]] || fail 'image-reference must be an immutable OCI digest'
+        image_repository="${image%@sha256:*}"
+        allowed=false
+        while IFS= read -r allowed_repository || [[ -n "$allowed_repository" ]]; do
+          allowed_repository="${allowed_repository%$'\r'}"
+          [[ -z "$allowed_repository" || "$allowed_repository" == \#* ]] && continue
+          [[ "$allowed_repository" =~ ^[a-z0-9.-]+(/[a-z0-9._-]+)+$ ]] || fail 'Trusted image repository allowlist contains an invalid entry'
+          [[ "$image_repository" == "$allowed_repository" ]] && allowed=true
+        done < "$allowlist"
+        [[ "$allowed" == true ]] || fail 'Image repository is not allowed for this deployment target'
+        [[ "$EAC_WORKLOAD" =~ ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$ && ${#EAC_WORKLOAD} -le 253 ]] || fail 'workload must be a Kubernetes DNS subdomain'
+        [[ "$EAC_CONTAINER" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ && ${#EAC_CONTAINER} -le 63 ]] || fail 'container must be a Kubernetes DNS label'
+        workload_allowed=false
+        while IFS= read -r allowed_workload || [[ -n "$allowed_workload" ]]; do
+          allowed_workload="${allowed_workload%$'\r'}"
+          [[ -z "$allowed_workload" || "$allowed_workload" == \#* ]] && continue
+          [[ "$allowed_workload" =~ ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?/[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]] || fail 'Trusted workload allowlist contains an invalid entry'
+          [[ "$EAC_WORKLOAD/$EAC_CONTAINER" == "$allowed_workload" ]] && workload_allowed=true
+        done < "$workload_allowlist"
+        [[ "$workload_allowed" == true ]] || fail 'Workload and container are not allowed for this deployment target'
+
+        oc login "$target_api" --token="$(cat -- /var/run/eac/deployment/token)" --certificate-authority=/var/run/eac/deployment/ca.crt
+        oc --namespace "$target_namespace" set image "deployment/$EAC_WORKLOAD" "$EAC_CONTAINER=$image"
+        oc --namespace "$target_namespace" rollout status "deployment/$EAC_WORKLOAD" --timeout=5m
+        printf '%s' "$image" > "$(results.deployed-image.path)"
+    - name: smoke
+      image: curlimages/curl:8.12.1@sha256:94e9e444bcba979c2ea12e27ae39bee4cd10bc7041a472c4727a558e213744e6
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: [ALL]
+        runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 101
+      volumeMounts:
+        - {name: target-policy, mountPath: /etc/eac/deployment-policy, readOnly: true}
+      script: |
+        #!/bin/sh
+        set -eu
+        smoke_url=''
+        if [ -f /etc/eac/deployment-policy/smoke-url ]; then
+          smoke_url="$(tr -d '\r\n' < /etc/eac/deployment-policy/smoke-url)"
+        fi
+        if [ -n "$smoke_url" ]; then
+          case "$smoke_url" in https://*) ;; *) printf '[ERROR] Trusted smoke URL must use HTTPS\n' >&2; exit 1 ;; esac
+          curl --proto '=https' --fail --silent --show-error --retry 12 --retry-all-errors --retry-delay 5 "$smoke_url" >/dev/null
+        fi
+        printf 'Succeeded' > "$(results.deployment-status.path)"

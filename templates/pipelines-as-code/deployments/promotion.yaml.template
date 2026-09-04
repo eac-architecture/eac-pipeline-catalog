@@ -1,0 +1,24 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: __REPOSITORY_NAME__-deployment
+  annotations:
+    pipelinesascode.tekton.dev/on-event: "[push]"
+    pipelinesascode.tekton.dev/on-target-branch: "[main]"
+    pipelinesascode.tekton.dev/pipeline: https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v__CATALOG_RELEASE_VERSION__/catalog/profiles/deployments/pipelines/promotion.yaml
+spec:
+  pipelineRef: {name: eac-deployment-promotion}
+  params:
+    - {name: repo-url, value: "{{ source_url }}"}
+    - {name: revision, value: "{{ revision }}"}
+    - {name: workload, value: __WORKLOAD__}
+    - {name: container, value: __CONTAINER__}
+    - {name: image-reference, value: __IMAGE_REFERENCE_BY_DIGEST__}
+  taskRunTemplate:
+    serviceAccountName: eac-deployment
+  workspaces:
+    - name: source
+      volumeClaimTemplate:
+        spec:
+          accessModes: [ReadWriteOnce]
+          resources: {requests: {storage: 1Gi}}

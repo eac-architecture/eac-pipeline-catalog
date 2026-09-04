@@ -5,7 +5,7 @@ metadata:
   labels:
     app.kubernetes.io/name: eac-pipeline-catalog
     app.kubernetes.io/component: git-checkout
-    app.kubernetes.io/version: 0.4.10
+    app.kubernetes.io/version: 0.5.0
 spec:
   description: Checks out an immutable Git revision into the source workspace.
   params:
@@ -37,7 +37,7 @@ spec:
       runAsUser: 65532
   steps:
     - name: checkout
-      image: alpine/git:2.49.1
+      image: alpine/git:2.49.1@sha256:c0280cf9572316299b08544065d3bf35db65043d5e3963982ec50647d2746e26
       workingDir: $(workspaces.source.path)
       env:
         - name: HOME

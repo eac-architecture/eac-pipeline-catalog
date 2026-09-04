@@ -20,6 +20,19 @@ EAC.Foundation, a un servicio concreto ni a una solución funcional.
 | NuGet release candidate | `eac-nuget-release-candidate` | Implementado sin publicación y con la misma integración seleccionable |
 | NuGet prerelease publication | `eac-nuget-prerelease-publication` | Implementado con rama `release/*`, tag inmutable y la misma integración seleccionable |
 | NuGet stable publication | `eac-nuget-stable-publication` | Implementado con `main`, tag estable y confirmación `Listed` |
+| npm CI / publication | `eac-npm-ci`, `eac-npm-publication` | Implementado localmente; publicación remota y release `0.5.0` pendientes |
+| Angular CI | `eac-angular-ci` | Implementado localmente; consumidor real y release `0.5.0` pendientes |
+| .NET service CI / publication | `eac-dotnet-service-ci`, `eac-dotnet-service-publication` | Implementado localmente; GHCR real y release `0.5.0` pendientes |
+| Deployment | `eac-deployment-promotion` | Implementado localmente; target real y release `0.5.0` pendientes |
+
+Los contratos nuevos están implementados en el catálogo `0.5.0`. Su cierre
+integrado requiere aún consumidores reales, credenciales autorizadas y, para
+deployment, un destino OpenShift; las pruebas locales no se presentan como una
+publicación o promoción remota. El tag `v0.5.0` no existe todavía: las
+referencias remotas conservan `__CATALOG_RELEASE_VERSION__` y no son
+consumibles hasta que el proceso de release sustituya mecánicamente el
+placeholder y cree el tag inmutable. No se debe reemplazar por `main` o
+`develop`.
 
 ## Instalación manual en Tekton
 
@@ -54,6 +67,40 @@ devuelve un código distinto de cero cuando falla la ejecución. La Pipeline
 `eac-nuget-ci` debe haberse instalado previamente con `scripts/install.sh`.
 Esta entrada manual utiliza el mismo contrato que el trigger Git, pero no
 simula ni necesita un evento de GitHub.
+
+Los perfiles npm, Angular y servicio .NET se ejecutan con el mismo workspace
+persistente y sin credenciales de publicación:
+
+```bash
+./scripts/run-product-ci.sh npm <repository-url> [revision]
+./scripts/run-product-ci.sh angular <repository-url> [revision]
+./scripts/run-product-ci.sh dotnet-service <repository-url> [revision]
+```
+
+La publicación npm o de imagen requiere rama/tag coincidentes y la
+Service Account `eac-release`; las credenciales continúan dentro de Secrets:
+
+```bash
+./scripts/run-publication.sh npm <repository-url> <sha> <release-branch> <tag> <prerelease|stable>
+./scripts/run-publication.sh dotnet-service <repository-url> <sha> <release-branch> <tag> <prerelease|stable> <image-repository>
+```
+
+La promoción manual exige un digest ya publicado y una Service Account de
+deployment independiente. El endpoint, namespace, CA, allowlist de
+repositorios OCI y smoke URL no se aceptan desde el evento ni desde la línea
+de comandos. Los suministran los recursos confiables `eac-deployment-target`
+(Secret: `token`, `ca.crt`) y `eac-deployment-policy` (ConfigMap: `api-url`,
+`namespace`, `allowed-image-repositories`, `allowed-workloads` y `smoke-url`
+opcional). La allowlist de imágenes contiene un repositorio exacto por línea,
+sin tags, digests ni comodines; la de workloads contiene pares
+`deployment/container`. La promoción modifica sólo un Deployment ya existente
+y no aplica manifiestos procedentes del repositorio disparador.
+
+```bash
+./scripts/run-deployment.sh \
+  <deployment-repository-url> <revision> <workload> <container> \
+  <image@sha256:digest>
+```
 
 ## Ejecución manual de un candidato NuGet
 

@@ -1,0 +1,60 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: eac-npm-publish
+  labels:
+    app.kubernetes.io/name: eac-pipeline-catalog
+    app.kubernetes.io/component: npm-publish
+    app.kubernetes.io/version: 0.5.0
+spec:
+  description: Publishes the exact retained npm package using the scoped npm credential.
+  params:
+    - name: package-file
+      type: string
+    - {name: package-name, type: string}
+    - {name: package-version, type: string}
+    - {name: package-digest, type: string}
+  workspaces:
+    - name: source
+  results:
+    - name: artifact-uri
+    - name: publication-status
+  steps:
+    - name: publish
+      image: node:22.14.0-bookworm-slim@sha256:1c18d9ab3af4585870b92e4dbc5cac5a0dc77dd13df1a5905cea89fc720eb05b
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: [ALL]
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+      env:
+        - {name: EAC_PACKAGE_FILE, value: $(params.package-file)}
+        - {name: EAC_PACKAGE_NAME, value: $(params.package-name)}
+        - {name: EAC_PACKAGE_VERSION, value: $(params.package-version)}
+        - {name: EAC_PACKAGE_DIGEST, value: $(params.package-digest)}
+        - {name: NPM_CONFIG_IGNORE_SCRIPTS, value: "true"}
+        - name: NPM_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: eac-release-publishing
+              key: npm-token
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+        umask 077
+        [[ "$EAC_PACKAGE_FILE" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]*\.tgz$ ]] || { printf '[ERROR] Invalid retained npm package filename\n' >&2; exit 1; }
+        [[ "$EAC_PACKAGE_NAME" =~ ^@eac-architecture/[a-z0-9]+([._-][a-z0-9]+)*$ ]] || { printf '[ERROR] Invalid npm package identity\n' >&2; exit 1; }
+        [[ "$EAC_PACKAGE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$ ]] || { printf '[ERROR] Invalid npm package version\n' >&2; exit 1; }
+        [[ "$EAC_PACKAGE_DIGEST" =~ ^[0-9a-f]{64}$ ]] || { printf '[ERROR] Invalid expected package SHA-256\n' >&2; exit 1; }
+        package="$(workspaces.source.path)/artifacts/npm/$EAC_PACKAGE_FILE"
+        [[ -s "$package" ]] || { printf '[ERROR] Retained npm package is missing\n' >&2; exit 1; }
+        actual_digest="$(sha256sum -- "$package" | awk '{print $1}')"
+        [[ "$actual_digest" == "$EAC_PACKAGE_DIGEST" ]] || { printf '[ERROR] Retained npm package SHA-256 changed before publication\n' >&2; exit 1; }
+        npmrc=/tmp/eac-npmrc
+        trap 'rm -f "$npmrc"' EXIT
+        printf '//registry.npmjs.org/:_authToken=%s\n' "$NPM_TOKEN" > "$npmrc"
+        npm publish "$package" --access public --ignore-scripts --userconfig "$npmrc"
+        printf 'https://www.npmjs.com/package/%s/v/%s' "$EAC_PACKAGE_NAME" "$EAC_PACKAGE_VERSION" > "$(results.artifact-uri.path)"
+        printf 'published' > "$(results.publication-status.path)"

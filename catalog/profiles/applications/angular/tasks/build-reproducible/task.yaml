@@ -1,0 +1,62 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: eac-angular-build-reproducible
+  labels:
+    app.kubernetes.io/name: eac-pipeline-catalog
+    app.kubernetes.io/component: angular-build-reproducible
+    app.kubernetes.io/version: 0.5.0
+spec:
+  description: Builds an Angular application twice and rejects non-reproducible static bundles.
+  workspaces:
+    - name: source
+  results:
+    - name: bundle-file
+    - name: bundle-digest
+    - name: build-status
+  stepTemplate:
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: [ALL]
+      runAsNonRoot: true
+      runAsUser: 1000
+      runAsGroup: 1000
+  steps:
+    - name: build-and-compare
+      image: node:22.14.0-bookworm-slim@sha256:1c18d9ab3af4585870b92e4dbc5cac5a0dc77dd13df1a5905cea89fc720eb05b
+      workingDir: $(workspaces.source.path)/repository
+      env:
+        - name: HOME
+          value: $(workspaces.source.path)/.home/npm
+        - name: NPM_CONFIG_CACHE
+          value: $(workspaces.source.path)/.npm
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        [[ -s angular.json && -s package.json && -s package-lock.json ]] || {
+          printf '[ERROR] angular.json, package.json and package-lock.json are required\n' >&2
+          exit 1
+        }
+        npm ci --ignore-scripts
+        npm run lint --if-present
+        rm -rf /tmp/angular-first /tmp/angular-second
+        npm run build -- --configuration production --output-path /tmp/angular-first
+        npm run build -- --configuration production --output-path /tmp/angular-second
+        normalize() {
+          local source="$1" target="$2"
+          tar --sort=name --mtime='@0' --owner=0 --group=0 --numeric-owner -C "$source" -cf - . | gzip -n > "$target"
+        }
+        normalize /tmp/angular-first /tmp/angular-first.tar.gz
+        normalize /tmp/angular-second /tmp/angular-second.tar.gz
+        cmp /tmp/angular-first.tar.gz /tmp/angular-second.tar.gz || {
+          printf '[ERROR] Angular production bundle is not reproducible\n' >&2
+          exit 1
+        }
+        mkdir -p "$(workspaces.source.path)/artifacts/angular"
+        bundle='angular-web.tar.gz'
+        cp /tmp/angular-first.tar.gz "$(workspaces.source.path)/artifacts/angular/$bundle"
+        sha256sum "$(workspaces.source.path)/artifacts/angular/$bundle" | awk '{print $1}' | tr -d '\n' > "$(results.bundle-digest.path)"
+        printf '%s' "$bundle" > "$(results.bundle-file.path)"
+        printf 'Succeeded' > "$(results.build-status.path)"
