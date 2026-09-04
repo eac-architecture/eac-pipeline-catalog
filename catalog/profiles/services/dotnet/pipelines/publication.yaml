@@ -1,0 +1,61 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: eac-dotnet-service-publication
+  annotations:
+    pipelinesascode.tekton.dev/task: >-
+      [https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.5.0/catalog/shared/tasks/git-checkout/task.yaml,
+      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.5.0/catalog/profiles/services/dotnet/tasks/verify-and-archive/task.yaml,
+      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.5.0/catalog/profiles/packages/nuget/tasks/release-revision-gate/task.yaml,
+      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.5.0/catalog/profiles/services/dotnet/tasks/publish-image/task.yaml]
+  labels:
+    app.kubernetes.io/name: eac-pipeline-catalog
+    app.kubernetes.io/component: dotnet-service-publication
+    app.kubernetes.io/version: 0.5.0
+spec:
+  params:
+    - {name: repo-url, type: string}
+    - {name: revision, type: string}
+    - {name: image-repository, type: string}
+    - {name: authorized-branch, type: string}
+    - {name: release-tag, type: string}
+    - {name: publication-channel, type: string}
+  workspaces:
+    - {name: source}
+  tasks:
+    - name: checkout
+      taskRef: {kind: Task, name: eac-git-checkout}
+      params:
+        - {name: repo-url, value: $(params.repo-url)}
+        - {name: revision, value: $(params.revision)}
+      workspaces:
+        - {name: source, workspace: source}
+    - name: verify-and-archive
+      runAfter: [checkout]
+      taskRef: {kind: Task, name: eac-dotnet-service-verify-and-archive}
+      workspaces:
+        - {name: source, workspace: source}
+    - name: publish-image
+      runAfter: [release-gate]
+      taskRef: {kind: Task, name: eac-dotnet-service-publish-image}
+      params:
+        - {name: image-repository, value: $(params.image-repository)}
+        - {name: image-archive, value: $(tasks.verify-and-archive.results.image-archive)}
+        - {name: product-version, value: $(tasks.verify-and-archive.results.product-version)}
+      workspaces:
+        - {name: source, workspace: source}
+    - name: release-gate
+      runAfter: [verify-and-archive]
+      taskRef: {kind: Task, name: eac-release-revision-gate}
+      params:
+        - {name: authorized-branch, value: $(params.authorized-branch)}
+        - {name: release-tag, value: $(params.release-tag)}
+        - {name: package-version, value: $(tasks.verify-and-archive.results.product-version)}
+        - {name: publication-channel, value: $(params.publication-channel)}
+      workspaces:
+        - {name: source, workspace: source}
+  results:
+    - {name: commit-sha, value: $(tasks.checkout.results.commit-sha)}
+    - {name: artifact-uri, value: $(tasks.publish-image.results.artifact-uri)}
+    - {name: artifact-digest, value: $(tasks.publish-image.results.artifact-digest)}
+    - {name: publication-status, value: $(tasks.publish-image.results.publication-status)}

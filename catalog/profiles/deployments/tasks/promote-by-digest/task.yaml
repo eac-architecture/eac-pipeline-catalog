@@ -1,0 +1,72 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: eac-deployment-promote-by-digest
+  labels:
+    app.kubernetes.io/name: eac-pipeline-catalog
+    app.kubernetes.io/component: deployment-promote-by-digest
+    app.kubernetes.io/version: 0.5.0
+spec:
+  description: Applies versioned deployment manifests and promotes an existing OCI image by digest without rebuilding it.
+  params:
+    - {name: target-api, type: string}
+    - {name: target-namespace, type: string}
+    - {name: manifest-path, type: string, default: deploy}
+    - {name: workload, type: string}
+    - {name: container, type: string}
+    - {name: image-reference, type: string}
+    - {name: smoke-url, type: string, default: ""}
+  workspaces:
+    - {name: source}
+  results:
+    - {name: deployed-image}
+    - {name: deployment-status}
+  volumes:
+    - name: target-credentials
+      secret:
+        secretName: eac-deployment-target
+  steps:
+    - name: deploy
+      image: quay.io/openshift/origin-cli:4.18
+      workingDir: $(workspaces.source.path)/repository
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: [ALL]
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+      volumeMounts:
+        - {name: target-credentials, mountPath: /var/run/eac/deployment, readOnly: true}
+      env:
+        - {name: HOME, value: /tmp/eac-home}
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+        image='$(params.image-reference)'
+        manifest='$(params.manifest-path)'
+        [[ "$image" =~ ^[a-z0-9.-]+(/[a-z0-9._-]+)+@sha256:[0-9a-f]{64}$ ]] || { printf '[ERROR] image-reference must be an immutable OCI digest\n' >&2; exit 1; }
+        [[ "$manifest" != /* && "$manifest" != *..* && -e "$manifest" ]] || { printf '[ERROR] manifest-path must be an existing repository-relative path\n' >&2; exit 1; }
+        token="$(cat /var/run/eac/deployment/token)"
+        oc login '$(params.target-api)' --token="$token" --certificate-authority=/var/run/eac/deployment/ca.crt
+        oc --namespace '$(params.target-namespace)' apply --filename "$manifest"
+        oc --namespace '$(params.target-namespace)' set image 'deployment/$(params.workload)' '$(params.container)'="$image"
+        oc --namespace '$(params.target-namespace)' rollout status 'deployment/$(params.workload)' --timeout=5m
+        printf '%s' "$image" > "$(results.deployed-image.path)"
+    - name: smoke
+      image: curlimages/curl:8.12.1
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: [ALL]
+        runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 101
+      script: |
+        #!/bin/sh
+        set -eu
+        smoke_url='$(params.smoke-url)'
+        if [ -n "$smoke_url" ]; then
+          curl --fail --silent --show-error --retry 12 --retry-all-errors --retry-delay 5 "$smoke_url" >/dev/null
+        fi
+        printf 'Succeeded' > "$(results.deployment-status.path)"

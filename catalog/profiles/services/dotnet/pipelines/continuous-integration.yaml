@@ -1,0 +1,35 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: eac-dotnet-service-ci
+  annotations:
+    pipelinesascode.tekton.dev/task: >-
+      [https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.5.0/catalog/shared/tasks/git-checkout/task.yaml,
+      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.5.0/catalog/profiles/services/dotnet/tasks/verify-and-archive/task.yaml]
+  labels:
+    app.kubernetes.io/name: eac-pipeline-catalog
+    app.kubernetes.io/component: dotnet-service-ci
+    app.kubernetes.io/version: 0.5.0
+spec:
+  params:
+    - {name: repo-url, type: string}
+    - {name: revision, type: string, default: main}
+  workspaces:
+    - {name: source}
+  tasks:
+    - name: checkout
+      taskRef: {kind: Task, name: eac-git-checkout}
+      params:
+        - {name: repo-url, value: $(params.repo-url)}
+        - {name: revision, value: $(params.revision)}
+      workspaces:
+        - {name: source, workspace: source}
+    - name: verify-and-archive
+      runAfter: [checkout]
+      taskRef: {kind: Task, name: eac-dotnet-service-verify-and-archive}
+      workspaces:
+        - {name: source, workspace: source}
+  results:
+    - {name: commit-sha, value: $(tasks.checkout.results.commit-sha)}
+    - {name: artifact-digest, value: $(tasks.verify-and-archive.results.archive-digest)}
+    - {name: test-status, value: $(tasks.verify-and-archive.results.test-status)}

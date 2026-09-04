@@ -1,0 +1,56 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: eac-dotnet-service-publish-image
+  labels:
+    app.kubernetes.io/name: eac-pipeline-catalog
+    app.kubernetes.io/component: dotnet-service-publish-image
+    app.kubernetes.io/version: 0.5.0
+spec:
+  description: Publishes the exact retained .NET SDK container archive to GHCR and returns its immutable manifest digest.
+  params:
+    - {name: image-repository, type: string, description: Repository below ghcr.io/eac-architecture.}
+    - {name: image-archive, type: string}
+    - {name: product-version, type: string}
+  workspaces:
+    - {name: source}
+  results:
+    - {name: artifact-uri}
+    - {name: artifact-digest}
+    - {name: publication-status}
+  steps:
+    - name: publish
+      image: quay.io/skopeo/stable:v1.18.0
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: [ALL]
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+      env:
+        - name: REGISTRY_USERNAME
+          valueFrom:
+            secretKeyRef: {name: eac-release-publishing, key: ghcr-username}
+        - name: REGISTRY_TOKEN
+          valueFrom:
+            secretKeyRef: {name: eac-release-publishing, key: ghcr-token}
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+        repository='$(params.image-repository)'
+        [[ "$repository" =~ ^[a-z0-9]+([._-][a-z0-9]+)*$ ]] || { printf '[ERROR] Invalid image repository\n' >&2; exit 1; }
+        version='$(params.product-version)'
+        archive="$(workspaces.source.path)/artifacts/oci/$(params.image-archive)"
+        [[ -s "$archive" ]] || { printf '[ERROR] Retained container archive is missing\n' >&2; exit 1; }
+        auth_file=/tmp/eac-registry-auth.json
+        printf '%s' "$REGISTRY_TOKEN" | skopeo login --authfile "$auth_file" --username "$REGISTRY_USERNAME" --password-stdin ghcr.io
+        digest_file=/tmp/image-digest
+        skopeo copy --authfile "$auth_file" --digestfile "$digest_file" \
+          "docker-archive:$archive" "docker://ghcr.io/eac-architecture/$repository:$version"
+        rm -f "$auth_file"
+        digest="$(tr -d '[:space:]' < "$digest_file")"
+        [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { printf '[ERROR] Registry did not report an immutable manifest digest\n' >&2; exit 1; }
+        printf 'ghcr.io/eac-architecture/%s@%s' "$repository" "$digest" > "$(results.artifact-uri.path)"
+        printf '%s' "$digest" > "$(results.artifact-digest.path)"
+        printf 'published' > "$(results.publication-status.path)"

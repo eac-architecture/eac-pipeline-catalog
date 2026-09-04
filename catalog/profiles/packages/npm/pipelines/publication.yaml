@@ -1,0 +1,60 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: eac-npm-publication
+  annotations:
+    pipelinesascode.tekton.dev/task: >-
+      [https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.5.0/catalog/shared/tasks/git-checkout/task.yaml,
+      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.5.0/catalog/profiles/packages/npm/tasks/verify-and-pack/task.yaml,
+      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.5.0/catalog/profiles/packages/nuget/tasks/release-revision-gate/task.yaml,
+      https://raw.githubusercontent.com/eac-architecture/eac-pipeline-catalog/v0.5.0/catalog/profiles/packages/npm/tasks/publish/task.yaml]
+  labels:
+    app.kubernetes.io/name: eac-pipeline-catalog
+    app.kubernetes.io/component: npm-publication
+    app.kubernetes.io/version: 0.5.0
+spec:
+  params:
+    - {name: repo-url, type: string}
+    - {name: revision, type: string}
+    - {name: authorized-branch, type: string}
+    - {name: release-tag, type: string}
+    - {name: publication-channel, type: string}
+  workspaces:
+    - {name: source}
+  tasks:
+    - name: checkout
+      taskRef: {kind: Task, name: eac-git-checkout}
+      params:
+        - {name: repo-url, value: $(params.repo-url)}
+        - {name: revision, value: $(params.revision)}
+      workspaces:
+        - {name: source, workspace: source}
+    - name: verify-and-pack
+      runAfter: [checkout]
+      taskRef: {kind: Task, name: eac-npm-verify-and-pack}
+      workspaces:
+        - {name: source, workspace: source}
+    - name: publish
+      runAfter: [release-gate]
+      taskRef: {kind: Task, name: eac-npm-publish}
+      params:
+        - {name: package-file, value: $(tasks.verify-and-pack.results.package-file)}
+        - {name: package-name, value: $(tasks.verify-and-pack.results.package-name)}
+        - {name: package-version, value: $(tasks.verify-and-pack.results.package-version)}
+      workspaces:
+        - {name: source, workspace: source}
+    - name: release-gate
+      runAfter: [verify-and-pack]
+      taskRef: {kind: Task, name: eac-release-revision-gate}
+      params:
+        - {name: authorized-branch, value: $(params.authorized-branch)}
+        - {name: release-tag, value: $(params.release-tag)}
+        - {name: package-version, value: $(tasks.verify-and-pack.results.package-version)}
+        - {name: publication-channel, value: $(params.publication-channel)}
+      workspaces:
+        - {name: source, workspace: source}
+  results:
+    - {name: commit-sha, value: $(tasks.checkout.results.commit-sha)}
+    - {name: artifact-digest, value: $(tasks.verify-and-pack.results.package-digest)}
+    - {name: artifact-uri, value: $(tasks.publish.results.artifact-uri)}
+    - {name: publication-status, value: $(tasks.publish.results.publication-status)}

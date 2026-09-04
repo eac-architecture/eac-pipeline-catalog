@@ -1,0 +1,56 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: eac-dotnet-service-verify-and-archive
+  labels:
+    app.kubernetes.io/name: eac-pipeline-catalog
+    app.kubernetes.io/component: dotnet-service-verify-and-archive
+    app.kubernetes.io/version: 0.5.0
+spec:
+  description: Builds and tests one .NET service and emits a daemonless OCI-compatible image archive.
+  workspaces:
+    - name: source
+  results:
+    - name: product-version
+    - name: image-archive
+    - name: archive-digest
+    - name: test-status
+  stepTemplate:
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: [ALL]
+      runAsNonRoot: true
+      runAsUser: 65532
+      runAsGroup: 65532
+  steps:
+    - name: verify-and-archive
+      image: mcr.microsoft.com/dotnet/sdk:10.0.201
+      workingDir: $(workspaces.source.path)/repository
+      env:
+        - {name: CI, value: "true"}
+        - {name: DOTNET_CLI_HOME, value: $(workspaces.source.path)/.home/dotnet}
+        - {name: NUGET_PACKAGES, value: $(workspaces.source.path)/.nuget/packages}
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+        [[ -s VERSION && -s global.json && -s NuGet.Config ]] || { printf '[ERROR] VERSION, global.json and NuGet.Config are required\n' >&2; exit 1; }
+        solution="$(find . -maxdepth 1 -type f \( -name '*.sln' -o -name '*.slnx' \) -print -quit)"
+        [[ -n "$solution" ]] || { printf '[ERROR] One root solution is required\n' >&2; exit 1; }
+        mapfile -t projects < <(find src -name '*.csproj' -type f -exec grep -l '<IsPublishable>true</IsPublishable>' {} + 2>/dev/null)
+        [[ "${#projects[@]}" -eq 1 ]] || { printf '[ERROR] Exactly one IsPublishable service project is required\n' >&2; exit 1; }
+        version="$(tr -d '[:space:]' < VERSION)"
+        [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$ ]] || { printf '[ERROR] VERSION must be governed SemVer\n' >&2; exit 1; }
+        dotnet restore "$solution" --configfile NuGet.Config --locked-mode
+        dotnet format "$solution" --verify-no-changes --no-restore
+        dotnet build "$solution" -c Release --no-restore -p:Version="$version"
+        dotnet test "$solution" -c Release --no-build --no-restore
+        output="$(workspaces.source.path)/artifacts/oci"
+        mkdir -p "$output"
+        archive="$output/service-image.tar.gz"
+        dotnet publish "${projects[0]}" -c Release --no-restore --os linux --arch x64 /t:PublishContainer \
+          --no-build -p:Version="$version" -p:ContainerImageTag="$version" -p:ContainerArchiveOutputPath="$archive"
+        sha256sum "$archive" | awk '{print $1}' | tr -d '\n' > "$(results.archive-digest.path)"
+        printf 'service-image.tar.gz' > "$(results.image-archive.path)"
+        printf '%s' "$version" > "$(results.product-version.path)"
+        printf 'Succeeded' > "$(results.test-status.path)"

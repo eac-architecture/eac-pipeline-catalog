@@ -33,6 +33,10 @@ class PipelineCatalogContractTests(unittest.TestCase):
             content = resource.read_text(encoding="utf-8")
             self.assertIn(f"app.kubernetes.io/version: {version}", content, resource)
             self.assertNotRegex(content, r"eac-pipeline-catalog/v(?!" + re.escape(version) + r"/)")
+        for template in ROOT.glob("templates/pipelines-as-code/**/*.yaml.template"):
+            content = template.read_text(encoding="utf-8")
+            self.assertIn(f"eac-pipeline-catalog/v{version}/", content, template)
+            self.assertNotRegex(content, r"eac-pipeline-catalog/v(?!" + re.escape(version) + r"/)")
 
     @rule("EAC-PC-CI-001")
     def test_ci_runs_validation_build_and_one_selected_test_without_publication(self) -> None:
@@ -87,6 +91,60 @@ class PipelineCatalogContractTests(unittest.TestCase):
         validation = (ROOT / "scripts/validate.sh").read_text(encoding="utf-8")
         for contract in ("bash -n", "task_count", "pipeline_count", "test-reproducibility.py", "test-catalog-contracts.py"):
             self.assertIn(contract, validation)
+
+    @rule("EAC-PC-NPM-001")
+    def test_npm_profile_verifies_retains_and_publishes_the_exact_package(self) -> None:
+        verify = (ROOT / "catalog/profiles/packages/npm/tasks/verify-and-pack/task.yaml").read_text(encoding="utf-8")
+        publish = (ROOT / "catalog/profiles/packages/npm/tasks/publish/task.yaml").read_text(encoding="utf-8")
+        pipeline = (ROOT / "catalog/profiles/packages/npm/pipelines/publication.yaml").read_text(encoding="utf-8")
+        for contract in ("npm ci --ignore-scripts", "npm test --if-present", "npm pack --ignore-scripts --json", "@eac-architecture/*", "sha256sum"):
+            self.assertIn(contract, verify)
+        self.assertIn("secretKeyRef:", publish)
+        self.assertIn("name: eac-release-publishing", publish)
+        self.assertIn("key: npm-token", publish)
+        self.assertIn("$(tasks.verify-and-pack.results.package-file)", pipeline)
+        self.assertIn("eac-release-revision-gate", pipeline)
+        self.assertNotIn("NPM_TOKEN", pipeline)
+
+    @rule("EAC-PC-ANGULAR-001")
+    def test_angular_profile_rejects_non_reproducible_production_bundles(self) -> None:
+        task = (ROOT / "catalog/profiles/applications/angular/tasks/build-reproducible/task.yaml").read_text(encoding="utf-8")
+        for contract in ("npm ci --ignore-scripts", "--configuration production", "--sort=name", "--mtime='@0'", "gzip -n", "cmp /tmp/angular-first.tar.gz /tmp/angular-second.tar.gz"):
+            self.assertIn(contract, task)
+
+    @rule("EAC-PC-OCI-001")
+    def test_dotnet_service_profile_builds_once_and_publishes_retained_image_by_digest(self) -> None:
+        archive = (ROOT / "catalog/profiles/services/dotnet/tasks/verify-and-archive/task.yaml").read_text(encoding="utf-8")
+        publish = (ROOT / "catalog/profiles/services/dotnet/tasks/publish-image/task.yaml").read_text(encoding="utf-8")
+        pipeline = (ROOT / "catalog/profiles/services/dotnet/pipelines/publication.yaml").read_text(encoding="utf-8")
+        self.assertIn("/t:PublishContainer", archive)
+        self.assertIn("ContainerArchiveOutputPath", archive)
+        self.assertIn("skopeo copy", publish)
+        self.assertIn("--digestfile", publish)
+        self.assertNotIn("dotnet publish", publish)
+        self.assertIn("$(tasks.verify-and-archive.results.image-archive)", pipeline)
+        self.assertIn("eac-release-revision-gate", pipeline)
+
+    @rule("EAC-PC-DEPLOY-001")
+    def test_deployment_profile_accepts_only_digest_and_never_builds(self) -> None:
+        task = (ROOT / "catalog/profiles/deployments/tasks/promote-by-digest/task.yaml").read_text(encoding="utf-8")
+        for contract in ("@sha256:[0-9a-f]{64}", "oc --namespace", "set image", "rollout status", "secretName: eac-deployment-target"):
+            self.assertIn(contract, task)
+        for forbidden in ("dotnet build", "npm run build", "docker build", "buildah bud"):
+            self.assertNotIn(forbidden, task)
+
+    @rule("EAC-PC-STARTER-001")
+    def test_service_starter_binding_generates_only_versioned_pipeline_runs(self) -> None:
+        binding = (ROOT / "templates/service-starter/bindings.yaml").read_text(encoding="utf-8")
+        version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+        self.assertIn(f"catalogVersion: {version}", binding)
+        self.assertIn(".tekton/continuous-integration.yaml", binding)
+        self.assertIn(".tekton/deployment.yaml", binding)
+        self.assertIn("forbiddenGeneratedKinds:\n    - Task\n    - Pipeline", binding)
+        for template in ("templates/pipelines-as-code/services/dotnet/continuous-integration.yaml.template", "templates/pipelines-as-code/deployments/promotion.yaml.template"):
+            content = (ROOT / template).read_text(encoding="utf-8")
+            self.assertIn(f"eac-pipeline-catalog/v{version}/", content)
+            self.assertIn("kind: PipelineRun", content)
 
 
 def main() -> int:

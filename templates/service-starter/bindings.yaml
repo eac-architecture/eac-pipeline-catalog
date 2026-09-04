@@ -1,0 +1,20 @@
+apiVersion: delivery.eac.dev/v1alpha1
+kind: ServiceStarterPipelineBindings
+metadata:
+  catalogVersion: 0.5.0
+spec:
+  pipelineEngine: tekton
+  containerBuild: dotnet-sdk
+  generatedFiles:
+    - target: .tekton/continuous-integration.yaml
+      template: templates/pipelines-as-code/services/dotnet/continuous-integration.yaml.template
+      pipeline: eac-dotnet-service-ci
+    - target: .tekton/deployment.yaml
+      template: templates/pipelines-as-code/deployments/promotion.yaml.template
+      pipeline: eac-deployment-promotion
+  forbiddenGeneratedKinds:
+    - Task
+    - Pipeline
+  requiredServiceAccounts:
+    continuousIntegration: eac-ci
+    deployment: eac-deployment

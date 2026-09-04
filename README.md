@@ -20,6 +20,15 @@ EAC.Foundation, a un servicio concreto ni a una solución funcional.
 | NuGet release candidate | `eac-nuget-release-candidate` | Implementado sin publicación y con la misma integración seleccionable |
 | NuGet prerelease publication | `eac-nuget-prerelease-publication` | Implementado con rama `release/*`, tag inmutable y la misma integración seleccionable |
 | NuGet stable publication | `eac-nuget-stable-publication` | Implementado con `main`, tag estable y confirmación `Listed` |
+| npm CI / publication | `eac-npm-ci`, `eac-npm-publication` | Package retenido, SHA-256 y publicación exacta con credencial aislada |
+| Angular CI | `eac-angular-ci` | Doble build Production normalizado y comparación byte a byte |
+| .NET service CI / publication | `eac-dotnet-service-ci`, `eac-dotnet-service-publication` | Archive creado por .NET SDK y publicación del mismo artifact en GHCR por digest |
+| Deployment | `eac-deployment-promotion` | Promoción OpenShift de una referencia `@sha256` existente, readiness y smoke |
+
+Los contratos nuevos están implementados en el catálogo `0.5.0`. Su cierre
+integrado requiere aún consumidores reales, credenciales autorizadas y, para
+deployment, un destino OpenShift; las pruebas locales no se presentan como una
+publicación o promoción remota.
 
 ## Instalación manual en Tekton
 
@@ -54,6 +63,32 @@ devuelve un código distinto de cero cuando falla la ejecución. La Pipeline
 `eac-nuget-ci` debe haberse instalado previamente con `scripts/install.sh`.
 Esta entrada manual utiliza el mismo contrato que el trigger Git, pero no
 simula ni necesita un evento de GitHub.
+
+Los perfiles npm, Angular y servicio .NET se ejecutan con el mismo workspace
+persistente y sin credenciales de publicación:
+
+```bash
+./scripts/run-product-ci.sh npm <repository-url> [revision]
+./scripts/run-product-ci.sh angular <repository-url> [revision]
+./scripts/run-product-ci.sh dotnet-service <repository-url> [revision]
+```
+
+La publicación npm o de imagen requiere rama/tag coincidentes y la
+Service Account `eac-release`; las credenciales continúan dentro de Secrets:
+
+```bash
+./scripts/run-publication.sh npm <repository-url> <sha> <release-branch> <tag> <prerelease|stable>
+./scripts/run-publication.sh dotnet-service <repository-url> <sha> <release-branch> <tag> <prerelease|stable> <image-repository>
+```
+
+La promoción manual exige un digest ya publicado y una Service Account de
+deployment independiente:
+
+```bash
+./scripts/run-deployment.sh \
+  <deployment-repository-url> <revision> <target-api> <target-namespace> \
+  <workload> <container> <image@sha256:digest>
+```
 
 ## Ejecución manual de un candidato NuGet
 

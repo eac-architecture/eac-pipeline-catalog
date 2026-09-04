@@ -1,0 +1,59 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: eac-npm-verify-and-pack
+  labels:
+    app.kubernetes.io/name: eac-pipeline-catalog
+    app.kubernetes.io/component: npm-verify-and-pack
+    app.kubernetes.io/version: 0.5.0
+spec:
+  description: Validates, tests and creates the npm package declared by an immutable repository revision.
+  workspaces:
+    - name: source
+  results:
+    - name: package-name
+    - name: package-version
+    - name: package-file
+    - name: package-digest
+    - name: test-status
+  stepTemplate:
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: [ALL]
+      runAsNonRoot: true
+      runAsUser: 1000
+      runAsGroup: 1000
+  steps:
+    - name: verify-and-pack
+      image: node:22.14.0-bookworm-slim
+      workingDir: $(workspaces.source.path)/repository
+      env:
+        - name: HOME
+          value: $(workspaces.source.path)/.home/npm
+        - name: NPM_CONFIG_CACHE
+          value: $(workspaces.source.path)/.npm
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        fail() { printf '[ERROR] %s\n' "$1" >&2; exit 1; }
+        [[ -s package.json && -s package-lock.json && -s VERSION ]] || fail 'package.json, package-lock.json and VERSION are required'
+        version="$(tr -d '[:space:]' < VERSION)"
+        [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$ ]] || fail 'VERSION must be governed SemVer'
+        declared="$(node -p "require('./package.json').version")"
+        [[ "$declared" == "$version" ]] || fail 'package.json version must match VERSION'
+        name="$(node -p "require('./package.json').name")"
+        [[ "$name" == @eac-architecture/* ]] || fail 'npm package must use the @eac-architecture scope'
+        npm ci --ignore-scripts
+        npm test --if-present
+        npm run build --if-present
+        npm pack --ignore-scripts --json > /tmp/npm-pack.json
+        package_file="$(node -p "require('/tmp/npm-pack.json')[0].filename")"
+        mkdir -p "$(workspaces.source.path)/artifacts/npm"
+        cp "$package_file" "$(workspaces.source.path)/artifacts/npm/$package_file"
+        sha256sum "$(workspaces.source.path)/artifacts/npm/$package_file" | awk '{print $1}' | tr -d '\n' > "$(results.package-digest.path)"
+        printf '%s' "$package_file" > "$(results.package-file.path)"
+        printf '%s' "$name" > "$(results.package-name.path)"
+        printf '%s' "$version" > "$(results.package-version.path)"
+        printf 'Succeeded' > "$(results.test-status.path)"

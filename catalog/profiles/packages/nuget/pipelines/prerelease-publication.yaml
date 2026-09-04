@@ -5,7 +5,7 @@ metadata:
   labels:
     app.kubernetes.io/name: eac-pipeline-catalog
     app.kubernetes.io/component: nuget-prerelease-publication
-    app.kubernetes.io/version: 0.4.10
+    app.kubernetes.io/version: 0.5.0
 spec:
   description: Revalidates an immutable tag and completes when the registry accepts the NuGet prerelease.
   params:

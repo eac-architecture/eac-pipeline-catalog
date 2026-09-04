@@ -5,7 +5,7 @@ metadata:
   labels:
     app.kubernetes.io/name: eac-pipeline-catalog
     app.kubernetes.io/component: dotnet-test
-    app.kubernetes.io/version: 0.4.10
+    app.kubernetes.io/version: 0.5.0
 spec:
   description: Executes automated tests against the existing .NET build.
   params:

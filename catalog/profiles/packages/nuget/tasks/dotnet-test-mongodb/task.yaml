@@ -5,7 +5,7 @@ metadata:
   labels:
     app.kubernetes.io/name: eac-pipeline-catalog
     app.kubernetes.io/component: dotnet-test-mongodb
-    app.kubernetes.io/version: 0.4.10
+    app.kubernetes.io/version: 0.5.0
 spec:
   description: Executes .NET tests against ephemeral standalone and replica-set MongoDB instances.
   params:

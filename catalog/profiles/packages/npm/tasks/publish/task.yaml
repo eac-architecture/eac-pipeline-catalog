@@ -1,0 +1,46 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: eac-npm-publish
+  labels:
+    app.kubernetes.io/name: eac-pipeline-catalog
+    app.kubernetes.io/component: npm-publish
+    app.kubernetes.io/version: 0.5.0
+spec:
+  description: Publishes the exact retained npm package using the scoped npm credential.
+  params:
+    - name: package-file
+      type: string
+    - {name: package-name, type: string}
+    - {name: package-version, type: string}
+  workspaces:
+    - name: source
+  results:
+    - name: artifact-uri
+    - name: publication-status
+  steps:
+    - name: publish
+      image: node:22.14.0-bookworm-slim
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: [ALL]
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+      env:
+        - name: NPM_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: eac-release-publishing
+              key: npm-token
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+        package="$(workspaces.source.path)/artifacts/npm/$(params.package-file)"
+        [[ -s "$package" ]] || { printf '[ERROR] Retained npm package is missing\n' >&2; exit 1; }
+        printf '//registry.npmjs.org/:_authToken=%s\n' "$NPM_TOKEN" > /tmp/eac-npmrc
+        npm publish "$package" --access public --userconfig /tmp/eac-npmrc
+        rm -f /tmp/eac-npmrc
+        printf 'https://www.npmjs.com/package/%s/v/%s' '$(params.package-name)' '$(params.package-version)' > "$(results.artifact-uri.path)"
+        printf 'published' > "$(results.publication-status.path)"

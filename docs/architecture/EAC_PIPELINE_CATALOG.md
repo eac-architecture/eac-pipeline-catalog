@@ -20,7 +20,7 @@ y scripts auxiliares para uso local; Tekton no ejecuta esos scripts.
 | repositorio | `eac-pipeline-catalog` |
 | entregable | catálogo Tekton versionado |
 | versión inicial | `0.1.0` |
-| versión en preparación | `0.4.10` |
+| versión en preparación | `0.5.0` |
 | propietario | EAC Platform |
 | consumidores | plataforma, herramientas, soluciones, servicios y cualquier repositorio compatible |
 | excluido | lógica de negocio, instalación de terceros y secretos |
@@ -155,12 +155,12 @@ catalog/
     │   ├── nuget/                     # implementado
     │   │   ├── tasks/
     │   │   └── pipelines/
-    │   └── npm/                       # se crea al implementar el perfil
+    │   └── npm/                       # CI, candidato retenido y publicación
     ├── applications/
-    │   └── angular/                   # se crea al implementar el perfil
+    │   └── angular/                   # bundle reproducible
     ├── services/
-    │   └── dotnet/                    # se crea al implementar el perfil
-    └── deployments/                   # se crea al implementar el perfil
+    │   └── dotnet/                    # imagen SDK .NET retenida y publicada
+    └── deployments/                   # promoción de digest existente
 ```
 
 La primera clasificación expresa la naturaleza del entregable: package,
@@ -170,10 +170,10 @@ tecnología. Las carpetas pendientes no se crean vacías.
 | Perfil | Artefacto objetivo | CI | Release | Estado |
 |---|---|---:|---:|---|
 | `packages/nuget` | `.nupkg`, `.snupkg`, SBOM y evidencia | sí | candidato, prerelease y estable implementados | implementado |
-| `packages/npm` | paquete npm | planificado | planificado | pendiente |
-| `applications/angular` | aplicación web estática o imagen OCI | planificado | planificado | pendiente |
-| `services/dotnet` | imagen OCI de API, worker o gateway | planificado | planificado | pendiente |
-| `deployments` | promoción por digest | no aplica | planificado | pendiente |
+| `packages/npm` | paquete npm | `npm ci`, pruebas y `npm pack` | publicación exacta con token granular | implementado; ejecución integrada pendiente |
+| `applications/angular` | bundle web estático | dos builds Production comparados byte a byte | artifact retenido por digest | implementado; ejecución integrada pendiente |
+| `services/dotnet` | imagen OCI de API, worker o gateway | build, pruebas y archive mediante .NET SDK | publicación del archive exacto en GHCR por digest | implementado; ejecución integrada pendiente |
+| `deployments` | promoción por digest | no aplica | apply, cambio de imagen, readiness y smoke | implementado; ejecución integrada pendiente |
 
 Los perfiles comparten Tasks únicamente cuando el comportamiento y el
 contrato son idénticos. No se crea una pipeline universal con condicionales
@@ -417,7 +417,38 @@ puede reintentar con el mismo tag, candidato y digest. El merge no puede
 revertirse automáticamente, pero tampoco se reconstruye ni se consume otra
 identidad estable.
 
-## 10. Versionado
+## 10. Perfiles npm, Angular, servicios .NET y deployments
+
+`packages/npm` exige `package.json`, lockfile y `VERSION`, comprueba que la
+versión y el scope `@eac-architecture` coincidan, ejecuta instalación cerrada,
+pruebas y build aplicables, y retiene el tarball de `npm pack` con SHA-256. La
+Task de publicación recibe únicamente ese archivo retenido y el Secret
+`eac-release-publishing/npm-token`; no vuelve a empaquetar.
+
+`applications/angular` ejecuta dos builds Production en directorios limpios.
+Normaliza orden, propietario, timestamp y compresión del bundle, y falla si los
+dos `tar.gz` no son idénticos. El resultado es un artifact estático retenido y
+direccionable por SHA-256.
+
+`services/dotnet` exige una solución raíz y exactamente un proyecto
+`IsPublishable`. El .NET SDK compila, prueba y genera el archive sin daemon con
+`/t:PublishContainer` y `ContainerArchiveOutputPath`. La publicación usa
+Skopeo para copiar ese mismo archive a GHCR; no ejecuta un segundo build y
+devuelve la referencia `ghcr.io/eac-architecture/<repo>@sha256:<digest>`.
+
+`deployments` obtiene una revisión inmutable del repositorio de manifiestos,
+rechaza tags y acepta exclusivamente referencias OCI con `@sha256`. La Task de
+deployment es la única que monta `eac-deployment-target`, aplica los
+manifiestos, cambia la imagen, espera el rollout y ejecuta el smoke opcional.
+No contiene ninguna operación de build.
+
+El contrato `templates/service-starter/bindings.yaml` mapea las opciones
+predeterminadas `pipelineEngine=tekton` y `containerBuild=dotnet-sdk` a dos
+`PipelineRun` versionados. Prohíbe que el Starter copie `Task` o `Pipeline`.
+La generación y sus generation tests siguen perteneciendo al repositorio
+`eac-service-starter`; el catálogo solo es propietario del binding consumible.
+
+## 11. Versionado
 
 - el catálogo usa SemVer;
 - cada producto declara su versión preliminar en un archivo `VERSION`;
@@ -430,7 +461,7 @@ identidad estable.
 - un cambio incompatible crea una nueva versión mayor del perfil;
 - cada `PipelineRun` conserva la especificación resuelta para auditoría.
 
-## 11. Modos de consumo
+## 12. Modos de consumo
 
 ### Pipelines as Code
 
@@ -479,7 +510,7 @@ las definiciones Tekton, sus ejecuciones, los PVC efímeros y los registros de
 repositorios de Pipelines as Code. No desinstala los controladores, no elimina
 credenciales y no modifica las Service Accounts de la plataforma.
 
-## 12. Matriz de trazabilidad de reglas
+## 13. Matriz de trazabilidad de reglas
 
 Las reglas implementadas se declaran en `coveredRules` y se validan desde
 `scripts/validate.sh`. Las pruebas de contrato inspeccionan los manifiestos y
@@ -496,8 +527,14 @@ catálogo.
 | `EAC-PC-STABLE-001` | Stable promueve el artefacto retenido desde el `main` coincidente sin reconstruir. | [`test-catalog-contracts.py`](../../scripts/test-catalog-contracts.py) · `test_stable_promotes_retained_candidate_without_rebuilding`. |
 | `EAC-PC-CRED-001` | Cada credencial se entrega sólo a la Task que la necesita: Git al checkout y a la compuerta remota; publicación al publisher. | [`test-catalog-contracts.py`](../../scripts/test-catalog-contracts.py) · `test_credentials_are_isolated_to_checkout_release_gate_and_publisher`. |
 | `EAC-PC-VALIDATE-001` | Scripts y recursos Tekton se validan antes de distribuir el catálogo. | [`test-catalog-contracts.py`](../../scripts/test-catalog-contracts.py) · `test_validation_gate_checks_scripts_catalog_and_reproducibility_contract`. |
+| `EAC-PC-ELASTICSEARCH-001` | La integración Elasticsearch reutiliza el perfil NuGet y ejecuta un nodo real no privilegiado. | [`test-catalog-contracts.py`](../../scripts/test-catalog-contracts.py) · `test_elasticsearch_profile_reuses_the_nuget_pipelines_with_a_safe_real_node`. |
+| `EAC-PC-NPM-001` | npm verifica y retiene un package gobernado antes de publicar exactamente ese archivo con una credencial aislada. | [`test-catalog-contracts.py`](../../scripts/test-catalog-contracts.py) · `test_npm_profile_verifies_retains_and_publishes_the_exact_package`. |
+| `EAC-PC-ANGULAR-001` | Angular entrega un bundle Production reproducible demostrado mediante dos builds independientes. | [`test-catalog-contracts.py`](../../scripts/test-catalog-contracts.py) · `test_angular_profile_rejects_non_reproducible_production_bundles`. |
+| `EAC-PC-OCI-001` | El servicio .NET se construye una vez, conserva su archive y publica esa misma imagen con un digest de manifest. | [`test-catalog-contracts.py`](../../scripts/test-catalog-contracts.py) · `test_dotnet_service_profile_builds_once_and_publishes_retained_image_by_digest`. |
+| `EAC-PC-DEPLOY-001` | Deployment promueve exclusivamente un digest existente, espera readiness y nunca recompila. | [`test-catalog-contracts.py`](../../scripts/test-catalog-contracts.py) · `test_deployment_profile_accepts_only_digest_and_never_builds`. |
+| `EAC-PC-STARTER-001` | El binding de Service Starter genera solo PipelineRuns fijados a una versión inmutable del catálogo. | [`test-catalog-contracts.py`](../../scripts/test-catalog-contracts.py) · `test_service_starter_binding_generates_only_versioned_pipeline_runs`. |
 
-## 13. Seguridad
+## 14. Seguridad
 
 - las Tasks se ejecutan sin privilegios y eliminan capabilities Linux;
 - CI no recibe credenciales de publicación;
@@ -510,7 +547,14 @@ catálogo.
 - los scripts del pull request se consideran código no confiable y no se ejecutan;
 - release y deployment utilizarán Service Accounts distintas de CI.
 
-## 14. Referencias NuGet
+La capacidad Security runtime es `NotApplicable`: el catálogo no es una
+aplicación en ejecución, aunque G5, aislamiento de credenciales y supply chain
+siguen siendo controles universales obligatorios. La capacidad Observability
+runtime también es `NotApplicable`: Tekton conserva logs, Results y estado de
+las ejecuciones, pero el catálogo no incorpora una dependencia runtime de
+telemetría. El owner de ambas evaluaciones es EAC Platform.
+
+## 15. Referencias NuGet
 
 - [Package metadata y estado `listed`](https://learn.microsoft.com/en-us/nuget/api/registration-base-url-resource).
 - [PackageBaseAddress incluye versiones listadas y no listadas](https://learn.microsoft.com/en-us/nuget/api/package-base-address-resource).
